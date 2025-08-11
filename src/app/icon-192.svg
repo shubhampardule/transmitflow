@@ -1,10 +1,24 @@
-<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="gradient192" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#8b5cf6"/>
-    </linearGradient>
-  </defs>
-  <circle cx="96" cy="96" r="96" fill="url(#gradient192)"/>
-  <path d="M48 112a6 6 0 0 1-4.68-9.78l47.4-59.22a3 3 0 0 1 5.16 2.76l-9.12 28.62a6 6 0 0 0 5.64 7.8h33.6a6 6 0 0 1 4.68 9.78l-47.4 59.22a3 3 0 0 1-5.16-2.76l9.12-28.62a6 6 0 0 0-5.64-7.8z" fill="white" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<svg width="192" height="192" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <!-- 
+      Definitions for reusable elements. The gradient is defined here.
+    -->
+    <defs>
+        <linearGradient id="zapGradient192" x1="0%" y1="0%" x2="100%" y2="0%">
+            <!-- Using standard hex codes for blue-500 and purple-500 -->
+            <stop offset="0%" stop-color="#3B82F6" />
+            <stop offset="100%" stop-color="#8B5CF6" />
+        </linearGradient>
+    </defs>
+    
+    <!-- The circular background filled with the gradient -->
+    <circle cx="50" cy="50" r="50" fill="url(#zapGradient192)" />
+    
+    <!-- 
+      The Zap/Lightning Icon.
+      The path data is placed inside a group <g> tag that scales and centers it.
+      The original icon was 24x24, so we scale it up and position it in the middle.
+    -->
+    <g transform="translate(25, 25) scale(2.08)">
+        <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
 </svg>
