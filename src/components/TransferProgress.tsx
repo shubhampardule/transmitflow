@@ -441,6 +441,11 @@ export default function TransferProgress({
                   <X className="h-4 w-4 mr-2" />
                   Cancel Transfer
                 </Button>
+              ) : isReceiver ? (
+                <Button onClick={onReset} variant="outline" className="flex-1">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Menu
+                </Button>
               ) : (
                 <Button onClick={onReset} variant="outline" className="flex-1">
                   <RotateCcw className="h-4 w-4 mr-2" />
