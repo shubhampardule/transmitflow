@@ -12,6 +12,7 @@ app.use(cors({
     ? [
         // Allow all Vercel app domains
         /^https:\/\/.*\.vercel\.app$/,
+        'https://sendify-ivory.vercel.app',  // Your actual Vercel domain
         'https://sendify-ten.vercel.app',
         'https://sendify.vercel.app',
         'https://your-custom-domain.com'
