@@ -1,7 +1,8 @@
-import { Suspense } from 'react';
+
 import P2PFileTransfer from '@/components/P2PFileTransfer';
 import FloatingScrollButton from '@/components/FloatingScrollButton';
 import { Toaster } from 'sonner';
+import { Suspense } from 'react';
 
 export default function Home() {
   return (
@@ -24,7 +25,7 @@ export default function Home() {
       
       {/* Content */}
       <div className="relative z-10">
-        <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+        <Suspense fallback={<div>Loading...</div>}>
           <P2PFileTransfer />
         </Suspense>
         <Toaster position="top-right" richColors />

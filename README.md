@@ -645,9 +645,9 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 <div align="center">
 
-**[⭐ Star this repo](https://github.com/yourusername/p2p-file-transfer)** if you find it useful!
+**[⭐ Star this repo](https://github.com/10neWOlF/p2p-file-transfer)** if you find it useful!
 
-**Made with ❤️ by [Your Name](https://github.com/yourusername)**
+**Made with ❤️ by [10neWOlF](https://github.com/10neWOlF)**
 
 ### 🚀 *Share files freely, privately, and instantly!*
 
