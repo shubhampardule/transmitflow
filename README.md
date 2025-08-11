@@ -1,22 +1,22 @@
-# 🚀 P2P File Transfer
+# ⚡ RapidShare
 
 <div align="center">
 
-![P2P File Transfer](https://img.shields.io/badge/P2P-File%20Transfer-blue?style=for-the-badge)
+![RapidShare](https://img.shields.io/badge/RapidShare-Lightning%20Fast-blue?style=for-the-badge)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react)
 ![WebRTC](https://img.shields.io/badge/WebRTC-Enabled-green?style=for-the-badge)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Ready-3178C6?style=for-the-badge&logo=typescript)
 
-**A modern, secure peer-to-peer file transfer application that connects devices directly - no servers, no limits, complete privacy.**
+**Lightning-fast peer-to-peer file sharing that connects devices directly - no servers, no limits, complete privacy.**
 
-[🚀 Live Demo](https://your-demo-url.com) • [📖 Documentation](https://github.com/yourusername/p2p-file-transfer/wiki) • [🐛 Report Bug](https://github.com/yourusername/p2p-file-transfer/issues) • [✨ Request Feature](https://github.com/yourusername/p2p-file-transfer/issues)
+[🚀 Live Demo](https://your-demo-url.com) • [📖 Documentation](https://github.com/yourusername/rapidshare/wiki) • [🐛 Report Bug](https://github.com/yourusername/rapidshare/issues) • [✨ Request Feature](https://github.com/yourusername/rapidshare/issues)
 
 </div>
 
 ---
 
-## 🎯 Why P2P File Transfer?
+## 🎯 Why RapidShare?
 
 <table>
 <tr>

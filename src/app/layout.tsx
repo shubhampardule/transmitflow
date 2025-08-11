@@ -13,10 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sendify",
-  description: "Secure peer-to-peer file sharing - Send files directly between devices",
-  keywords: ["file sharing", "peer-to-peer", "P2P", "secure transfer", "WebRTC"],
-  authors: [{ name: "Sendify" }],
+  title: "RapidShare",
+  description: "Lightning-fast peer-to-peer file sharing - Send files directly between devices",
+  keywords: ["file sharing", "peer-to-peer", "P2P", "secure transfer", "WebRTC", "rapid", "fast"],
+  authors: [{ name: "RapidShare" }],
   viewport: "width=device-width, initial-scale=1",
   robots: "index, follow",
 };
