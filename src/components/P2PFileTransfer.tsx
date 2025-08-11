@@ -49,12 +49,17 @@ export default function P2PFileTransfer() {
     });
     setHasNavigatedToSharing(false);
     
+    // Force return to Send tab when resetting
+    setActiveTab('send');
+    
     // Remove any query parameters and reset to main state
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.search = '';
       window.history.replaceState({}, '', url.toString());
     }
+    
+    console.log('Reset complete - returned to main menu');
   }, []);
 
   // Auto-switch to receive tab when QR code URL is detected (client-side only)
