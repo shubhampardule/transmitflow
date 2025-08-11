@@ -2,38 +2,43 @@
 
 This guide explains how to deploy the signaling server for your Sendify P2P file transfer application.
 
-## Quick Deploy Options
+## 🆓 Free Deployment Options
 
-### Option 1: Railway (Recommended)
-1. Go to [Railway.app](https://railway.app)
-2. Connect your GitHub account
-3. Click "New Project" → "Deploy from GitHub repo"
-4. Select your `sendify` repository
-5. Choose "Deploy from repo"
-6. Set the following environment variables:
-   - `NODE_ENV=production`
-   - `PORT=3003` (Railway will override this)
-7. In the Settings tab, set the root directory to `/` and the start command to `node signaling-server.js`
-8. Your server will be deployed at `https://your-app-name.up.railway.app`
+### Option 1: Render.com (Recommended - FREE)
+- **Free tier**: 750 hours/month (24/7 usage)
+- **Auto-sleep**: After 15 minutes (wakes up automatically)
+- **No credit card required**
 
-### Option 2: Render
+**Deploy Steps:**
 1. Go to [Render.com](https://render.com)
-2. Connect your GitHub account
+2. Sign up with GitHub
 3. Click "New" → "Web Service"
-4. Select your repository
+4. Connect GitHub and select your `sendify` repository
 5. Configure:
-   - **Environment**: Node
+   - **Name**: `sendify-signaling-server`
+   - **Runtime**: `Node`
    - **Build Command**: `npm install`
    - **Start Command**: `node signaling-server.js`
-   - **Environment Variables**:
-     - `NODE_ENV=production`
+   - **Environment Variables**: `NODE_ENV=production`
+6. Your server will be at: `https://sendify-signaling-server.onrender.com`
 
-### Option 3: Heroku
-1. Install Heroku CLI
-2. Login: `heroku login`
-3. Create app: `heroku create your-signaling-server-name`
-4. Set environment: `heroku config:set NODE_ENV=production`
-5. Deploy: `git push heroku main`
+### Option 2: Cyclic.sh (Always Active - FREE)
+1. Go to [Cyclic.sh](https://cyclic.sh)
+2. Connect your GitHub account
+3. Select your repository
+4. Set environment variable: `NODE_ENV=production`
+5. Deploy automatically
+
+### Option 3: Railway (⚠️ Paid after trial)
+- **Trial**: $5 credit (lasts ~1 month)
+- **After trial**: Requires payment
+- **Good for production**: If you plan to scale
+
+### Option 4: Glitch.com (FREE with limitations)
+1. Go to [Glitch.com](https://glitch.com)
+2. Click "New Project" → "Import from GitHub"
+3. Paste your repository URL
+4. Auto-deploys and gives you a URL
 
 ## Configure Your Vercel App
 

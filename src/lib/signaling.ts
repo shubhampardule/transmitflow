@@ -33,7 +33,7 @@ class SignalingService {
         // Production configuration
         if (hostname.includes('vercel.app') || hostname.includes('your-custom-domain.com')) {
           // Use your deployed signaling server URL
-          this.serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'wss://your-signaling-server.onrender.com';
+          this.serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'https://sendify-signaling-server.onrender.com';
         } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
           this.serverUrl = 'http://localhost:3003';
         } else {

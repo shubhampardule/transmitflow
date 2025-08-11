@@ -10,9 +10,11 @@ const server = http.createServer(app);
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? [
-        'https://sendify-ten.vercel.app',  // Replace with your actual Vercel domain
+        // Allow all Vercel app domains
+        /^https:\/\/.*\.vercel\.app$/,
+        'https://sendify-ten.vercel.app',
         'https://sendify.vercel.app',
-        'https://your-custom-domain.com'   // Add your custom domain if you have one
+        'https://your-custom-domain.com'
       ]
     : [
         'http://localhost:3000', 'http://127.0.0.1:3000', 
@@ -33,7 +35,12 @@ app.use(cors({
 const io = socketIO(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? ['https://your-domain.com'] 
+      ? [
+        // Allow all Vercel app domains
+        /^https:\/\/.*\.vercel\.app$/,
+        'https://sendify-ten.vercel.app',
+        'https://sendify.vercel.app'
+      ]
       : [
         'http://localhost:3000', 'http://127.0.0.1:3000',
         'http://localhost:3002', 'http://127.0.0.1:3002',
