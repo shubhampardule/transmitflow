@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Wifi, WifiOff, Zap } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TransferState } from '@/types';
@@ -16,6 +16,7 @@ import { generateRoomCode } from '@/lib/file-utils';
 import SendFilesPanel from './SendFilesPanel';
 import ReceiveFilesPanel from './ReceiveFilesPanel';
 import TransferProgress from './TransferProgress';
+import SendifyLogo from './SendifyLogo';
 
 export default function P2PFileTransfer() {
   console.log('=== P2PFileTransfer COMPONENT RENDERING ===');
@@ -424,9 +425,7 @@ export default function P2PFileTransfer() {
         <Card className="w-full max-w-2xl bg-background/80 backdrop-blur-xl border-white/20 shadow-2xl">
           <CardHeader className="text-center">
             <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500">
-                <Zap className="h-6 w-6 text-white" />
-              </div>
+              <SendifyLogo size={48} className="flex-shrink-0" />
               <div className="flex items-center gap-2">
                 {isConnected ? (
                   <Wifi className="h-5 w-5 text-green-500" />
