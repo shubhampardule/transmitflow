@@ -1,0 +1,29 @@
+name: Keep Render Service Alive
+
+on:
+  schedule:
+    # Run every 10 minutes during active hours (9 AM to 11 PM UTC)
+    - cron: '*/10 9-23 * * *'
+    # Run every 30 minutes during off hours to save GitHub Actions quota
+    - cron: '*/30 0-8 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Ping Signaling Server
+      run: |
+        echo "🏓 Pinging signaling server to keep it alive..."
+        response=$(curl -s -o /dev/null -w "%{http_code}" https://sendify-signaling-server.onrender.com/health)
+        if [ $response -eq 200 ]; then
+          echo "✅ Server responded with $response - Service is alive!"
+        else
+          echo "⚠️ Server responded with $response - May be spinning up..."
+        fi
+        
+    - name: Keep Alive Status
+      run: |
+        echo "🕐 Keep-alive ping completed at $(date)"
+        echo "📊 This prevents Render free tier from sleeping after 15 minutes"
