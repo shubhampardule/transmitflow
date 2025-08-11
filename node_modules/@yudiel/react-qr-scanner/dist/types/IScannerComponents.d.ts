@@ -1,0 +1,9 @@
+import { TrackFunction } from './index';
+export interface IScannerComponents {
+    finder?: boolean;
+    torch?: boolean;
+    tracker?: TrackFunction;
+    onOff?: boolean;
+    zoom?: boolean;
+}
+//# sourceMappingURL=IScannerComponents.d.ts.map

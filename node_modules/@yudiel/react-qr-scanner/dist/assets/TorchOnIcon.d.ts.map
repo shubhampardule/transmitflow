@@ -1,0 +1,1 @@
+{"version":3,"file":"TorchOnIcon.d.ts","sourceRoot":"","sources":["../../src/assets/TorchOnIcon.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,EAAE,aAAa,EAAE,MAAM,OAAO,CAAC;AAE7C,UAAU,aAAa;IACnB,OAAO,EAAE,MAAM,IAAI,CAAC;IACpB,SAAS,CAAC,EAAE,MAAM,CAAC;IACnB,KAAK,CAAC,EAAE,aAAa,CAAC;CACzB;AAED,MAAM,CAAC,OAAO,UAAU,WAAW,CAAC,KAAK,EAAE,aAAa,qBAQvD"}
