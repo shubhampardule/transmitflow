@@ -23,17 +23,21 @@ class SignalingService {
       if (serverUrl) {
         this.serverUrl = serverUrl;
       } else {
-        // If accessing via IP address, use the same IP for signaling server
+        // Check if we're in production (Vercel deployment)
         const hostname = window.location.hostname;
         const protocol = window.location.protocol;
         
         console.log('Detected hostname:', hostname);
         console.log('Detected protocol:', protocol);
         
-        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        // Production configuration
+        if (hostname.includes('vercel.app') || hostname.includes('your-custom-domain.com')) {
+          // Use your deployed signaling server URL
+          this.serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'wss://your-signaling-server.onrender.com';
+        } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
           this.serverUrl = 'http://localhost:3003';
         } else {
-          // Use the same IP/hostname but port 3003
+          // Use the same IP/hostname but port 3003 for local network
           this.serverUrl = `${protocol}//${hostname}:3003`;
         }
       }

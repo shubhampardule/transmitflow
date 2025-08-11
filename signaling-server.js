@@ -9,7 +9,11 @@ const server = http.createServer(app);
 // Configure CORS for Express
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-domain.com'] 
+    ? [
+        'https://sendify-ten.vercel.app',  // Replace with your actual Vercel domain
+        'https://sendify.vercel.app',
+        'https://your-custom-domain.com'   // Add your custom domain if you have one
+      ]
     : [
         'http://localhost:3000', 'http://127.0.0.1:3000', 
         'http://localhost:3001', 'http://127.0.0.1:3001',
