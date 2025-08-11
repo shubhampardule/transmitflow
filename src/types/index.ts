@@ -31,13 +31,52 @@ export interface TransferState {
   peer?: PeerConnection;
 }
 
-export interface SignalingMessage {
-  type: 'offer' | 'answer' | 'ice' | 'file-meta' | 'file-chunk' | 'transfer-complete' | 'transfer-cancelled';
-  payload?: any;
+export interface BaseSignalingMessage {
   toRoom?: string;
   fromPeer?: string;
-  data?: any;
 }
+
+export interface OfferMessage extends BaseSignalingMessage {
+  type: 'offer';
+  payload: RTCSessionDescriptionInit;
+}
+
+export interface AnswerMessage extends BaseSignalingMessage {
+  type: 'answer';
+  payload: RTCSessionDescriptionInit;
+}
+
+export interface IceMessage extends BaseSignalingMessage {
+  type: 'ice';
+  payload: RTCIceCandidateInit;
+}
+
+export interface FileMetaMessage extends BaseSignalingMessage {
+  type: 'file-meta';
+  data: FileMetadata;
+}
+
+export interface FileChunkMessage extends BaseSignalingMessage {
+  type: 'file-chunk';
+  data: ArrayBuffer;
+}
+
+export interface TransferCompleteMessage extends BaseSignalingMessage {
+  type: 'transfer-complete';
+}
+
+export interface TransferCancelledMessage extends BaseSignalingMessage {
+  type: 'transfer-cancelled';
+}
+
+export type SignalingMessage = 
+  | OfferMessage 
+  | AnswerMessage 
+  | IceMessage 
+  | FileMetaMessage 
+  | FileChunkMessage 
+  | TransferCompleteMessage 
+  | TransferCancelledMessage;
 
 export interface DataChannelMessage {
   type: 'file-list' | 'file-meta' | 'transfer-complete' | 'transfer-cancelled' | 'file-cancelled' | 'progress-sync';

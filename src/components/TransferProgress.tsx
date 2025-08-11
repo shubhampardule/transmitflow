@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -76,7 +77,7 @@ export default function TransferProgress({
         copyToClipboardFallback(roomCode);
         toast.success('Room code copied to clipboard!');
       }
-    } catch (error) {
+    } catch {
       // If clipboard API fails, use fallback
       copyToClipboardFallback(roomCode);
       toast.success('Room code copied to clipboard!');
@@ -95,7 +96,7 @@ export default function TransferProgress({
         copyToClipboardFallback(shareUrl);
         toast.success('Share link copied to clipboard!');
       }
-    } catch (error) {
+    } catch {
       // If clipboard API fails, use fallback
       copyToClipboardFallback(shareUrl);
       toast.success('Share link copied to clipboard!');
@@ -217,9 +218,11 @@ export default function TransferProgress({
             <div className="flex flex-col items-center space-y-4">
               <h3 className="font-medium">QR Code</h3>
               <div className="flex flex-col items-center space-y-4">
-                <img 
+                <Image 
                   src={qrCodeUrl} 
                   alt="QR Code for sharing" 
+                  width={200}
+                  height={200}
                   className="border rounded-lg"
                 />
                 <p className="text-sm text-muted-foreground text-center">
