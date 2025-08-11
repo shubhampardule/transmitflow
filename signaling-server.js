@@ -59,6 +59,30 @@ const io = socketIO(server, {
   pingInterval: 25000,
 });
 
+// Health check endpoint for uptime monitoring
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    rooms: rooms.size,
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    message: 'Sendify P2P Signaling Server',
+    status: 'Running',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      websocket: 'Socket.IO enabled'
+    }
+  });
+});
+
 // Store rooms and their participants
 const rooms = new Map();
 const MAX_ROOM_SIZE = 2;
