@@ -13,10 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TransferIt",
-  description: "Lightning-fast peer-to-peer file sharing - Send files directly between devices",
-  keywords: ["file sharing", "peer-to-peer", "P2P", "secure transfer", "WebRTC", "transfer", "fast"],
-  authors: [{ name: "TransferIt" }],
+  title: "TransmitFlow",
+  description: "Share files directly between devices - Peer-to-peer file sharing made simple",
+  keywords: ["file sharing", "peer-to-peer", "P2P", "transmit", "flow", "data transfer", "WebRTC"],
+  authors: [{ name: "TransmitFlow" }],
   viewport: "width=device-width, initial-scale=1",
   robots: "index, follow",
 };
