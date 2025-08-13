@@ -10,7 +10,7 @@
 
 **Share files directly between devices without any servers storing your data - Seamless file transmission made simple.**
 
-[🚀 Live Demo](https://transmitflow.com) • [📖 Documentation](https://github.com/yourusername/transmitflow/wiki) • [🐛 Report Bug](https://github.com/yourusername/transmitflow/issues) • [✨ Request Feature](https://github.com/yourusername/transmitflow/issues)
+[🚀 Live Demo](https://transmitflow.com) • [📖 Documentation](https://github.com/10neWOlF/transmitflow/wiki) • [🐛 Report Bug](https://github.com/10neWOlF/transmitflow/issues) • [✨ Request Feature](https://github.com/10neWOlF/transmitflow/issues)
 
 </div>
 
@@ -112,8 +112,8 @@
 
 ```bash
 # 1️⃣ Clone the repository
-git clone https://github.com/yourusername/p2p-file-transfer.git
-cd p2p-file-transfer
+git clone https://github.com/10neWOlF/transmitflow.git
+cd transmitflow
 
 # 2️⃣ Install dependencies
 npm install
@@ -483,9 +483,9 @@ pm2 start ecosystem.config.js
 
 **We ❤️ contributions! Join our community of developers making file sharing better for everyone.**
 
-[![Contributors](https://img.shields.io/github/contributors/yourusername/p2p-file-transfer?style=for-the-badge)](https://github.com/yourusername/p2p-file-transfer/graphs/contributors)
-[![Forks](https://img.shields.io/github/forks/yourusername/p2p-file-transfer?style=for-the-badge)](https://github.com/yourusername/p2p-file-transfer/network/members)
-[![Stars](https://img.shields.io/github/stars/yourusername/p2p-file-transfer?style=for-the-badge)](https://github.com/yourusername/p2p-file-transfer/stargazers)
+[![Contributors](https://img.shields.io/github/contributors/10neWOlF/transmitflow?style=for-the-badge)](https://github.com/10neWOlF/transmitflow/graphs/contributors)
+[![Forks](https://img.shields.io/github/forks/10neWOlF/transmitflow?style=for-the-badge)](https://github.com/10neWOlF/transmitflow/network/members)
+[![Stars](https://img.shields.io/github/stars/10neWOlF/transmitflow?style=for-the-badge)](https://github.com/10neWOlF/transmitflow/stargazers)
 
 </div>
 
@@ -495,8 +495,8 @@ pm2 start ecosystem.config.js
 # 1️⃣ Fork the repository on GitHub
 
 # 2️⃣ Clone your fork
-git clone https://github.com/YOUR-USERNAME/p2p-file-transfer.git
-cd p2p-file-transfer
+git clone https://github.com/YOUR-USERNAME/transmitflow.git
+cd transmitflow
 
 # 3️⃣ Create a feature branch
 git checkout -b feature/amazing-new-feature
@@ -579,8 +579,8 @@ All contributors get:
 ### 🤗 **Get Help & Connect**
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=for-the-badge&logo=discord)](https://discord.gg/your-discord)
-[![GitHub Discussions](https://img.shields.io/badge/GitHub-Discussions-green?style=for-the-badge&logo=github)](https://github.com/yourusername/p2p-file-transfer/discussions)
-[![Documentation](https://img.shields.io/badge/Docs-Read-blue?style=for-the-badge&logo=gitbook)](https://github.com/yourusername/p2p-file-transfer/wiki)
+[![GitHub Discussions](https://img.shields.io/badge/GitHub-Discussions-green?style=for-the-badge&logo=github)](https://github.com/10neWOlF/transmitflow/discussions)
+[![Documentation](https://img.shields.io/badge/Docs-Read-blue?style=for-the-badge&logo=gitbook)](https://github.com/10neWOlF/transmitflow/wiki)
 
 </div>
 
@@ -588,11 +588,11 @@ All contributors get:
 
 | 💭 **Type** | 🔗 **Where to Go** | ⏱️ **Response Time** |
 |:------------|:-------------------|:---------------------|
-| 🐛 **Bug Reports** | [GitHub Issues](https://github.com/yourusername/p2p-file-transfer/issues) | Usually within 24 hours |
-| 💡 **Feature Requests** | [GitHub Issues](https://github.com/yourusername/p2p-file-transfer/issues) | Weekly review cycle |
-| ❓ **Questions** | [GitHub Discussions](https://github.com/yourusername/p2p-file-transfer/discussions) | Community-powered |
+| 🐛 **Bug Reports** | [GitHub Issues](https://github.com/10neWOlF/transmitflow/issues) | Usually within 24 hours |
+| 💡 **Feature Requests** | [GitHub Issues](https://github.com/10neWOlF/transmitflow/issues) | Weekly review cycle |
+| ❓ **Questions** | [GitHub Discussions](https://github.com/10neWOlF/transmitflow/discussions) | Community-powered |
 | 💬 **Chat** | [Discord Server](https://discord.gg/your-discord) | Real-time |
-| 📖 **Documentation** | [Project Wiki](https://github.com/yourusername/p2p-file-transfer/wiki) | Always available |
+| 📖 **Documentation** | [Project Wiki](https://github.com/10neWOlF/transmitflow/wiki) | Always available |
 
 ### 🌟 **Show Your Support**
 
@@ -600,9 +600,9 @@ All contributors get:
 
 **If this project helped you, consider:**
 
-[![Star on GitHub](https://img.shields.io/badge/⭐-Star%20on%20GitHub-yellow?style=for-the-badge)](https://github.com/yourusername/p2p-file-transfer)
-[![Share on Twitter](https://img.shields.io/badge/🐦-Share%20on%20Twitter-1da1f2?style=for-the-badge)](https://twitter.com/intent/tweet?text=Check%20out%20this%20awesome%20P2P%20file%20transfer%20app!&url=https://github.com/yourusername/p2p-file-transfer)
-[![Buy Me a Coffee](https://img.shields.io/badge/☕-Buy%20Me%20a%20Coffee-orange?style=for-the-badge)](https://buymeacoffee.com/yourusername)
+[![Star on GitHub](https://img.shields.io/badge/⭐-Star%20on%20GitHub-yellow?style=for-the-badge)](https://github.com/10neWOlF/transmitflow)
+[![Share on Twitter](https://img.shields.io/badge/🐦-Share%20on%20Twitter-1da1f2?style=for-the-badge)](https://twitter.com/intent/tweet?text=Check%20out%20this%20awesome%20P2P%20file%20transfer%20app!&url=https://github.com/10neWOlF/transmitflow&via=ShubhamPardule)
+[![Buy Me a Coffee](https://img.shields.io/badge/☕-Buy%20Me%20a%20Coffee-orange?style=for-the-badge)](https://buymeacoffee.com/ShubhamPardule)
 
 </div>
 
@@ -637,7 +637,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ### 💝 **Special Thanks**
 
-- All our amazing [contributors](https://github.com/yourusername/p2p-file-transfer/graphs/contributors)
+- All our amazing [contributors](https://github.com/10neWOlF/transmitflow/graphs/contributors)
 - The open-source community for continuous inspiration
 - Everyone who provided feedback and suggestions
 
@@ -645,7 +645,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 <div align="center">
 
-**[⭐ Star this repo](https://github.com/10neWOlF/p2p-file-transfer)** if you find it useful!
+**[⭐ Star this repo](https://github.com/10neWOlF/transmitflow)** if you find it useful!
 
 **Made with ❤️ by [10neWOlF](https://github.com/10neWOlF)**
 
