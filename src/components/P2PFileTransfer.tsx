@@ -105,7 +105,6 @@ export default function P2PFileTransfer() {
         setIsConnected(true);
       } catch (error) {
         console.error('Failed to connect to signaling server:', error);
-        toast.error(`Failed to connect to server: ${error}`);
         setIsConnected(false);
         
         // Retry connection after a delay
