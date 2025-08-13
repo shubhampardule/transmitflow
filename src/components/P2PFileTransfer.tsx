@@ -103,7 +103,6 @@ export default function P2PFileTransfer() {
         await signalingService.connect();
         console.log('Successfully connected to signaling server');
         setIsConnected(true);
-        toast.success('Connected to signaling server');
       } catch (error) {
         console.error('Failed to connect to signaling server:', error);
         toast.error(`Failed to connect to server: ${error}`);
@@ -137,7 +136,6 @@ export default function P2PFileTransfer() {
 
     signalingService.onPeerDisconnected((peerId) => {
       console.log('Peer disconnected:', peerId);
-      toast.warning('Peer disconnected');
       handleReset();
     });
 
@@ -325,7 +323,6 @@ export default function P2PFileTransfer() {
     
     if (!isConnected) {
       console.log('Not connected to signaling server');
-      toast.error('Not connected to signaling server');
       return;
     }
 
@@ -374,7 +371,6 @@ export default function P2PFileTransfer() {
 
   const handleReceiveFiles = useCallback(async (code: string) => {
     if (!isConnected) {
-      toast.error('Not connected to signaling server');
       return;
     }
 
