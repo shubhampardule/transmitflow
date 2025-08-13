@@ -1,8 +1,8 @@
-# ⚡ RapidShare
+# ⚡ TransferIt
 
 <div align="center">
 
-![RapidShare](https://img.shields.io/badge/RapidShare-Lightning%20Fast-blue?style=for-the-badge)
+![TransferIt](https://img.shields.io/badge/TransferIt-Lightning%20Fast-blue?style=for-the-badge)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react)
 ![WebRTC](https://img.shields.io/badge/WebRTC-Enabled-green?style=for-the-badge)
@@ -10,13 +10,13 @@
 
 **Lightning-fast peer-to-peer file sharing that connects devices directly - no servers, no limits, complete privacy.**
 
-[🚀 Live Demo](https://your-demo-url.com) • [📖 Documentation](https://github.com/yourusername/rapidshare/wiki) • [🐛 Report Bug](https://github.com/yourusername/rapidshare/issues) • [✨ Request Feature](https://github.com/yourusername/rapidshare/issues)
+[🚀 Live Demo](https://your-demo-url.com) • [📖 Documentation](https://github.com/yourusername/transferit/wiki) • [🐛 Report Bug](https://github.com/yourusername/transferit/issues) • [✨ Request Feature](https://github.com/yourusername/transferit/issues)
 
 </div>
 
 ---
 
-## 🎯 Why RapidShare?
+## 🎯 Why TransferIt?
 
 <table>
 <tr>

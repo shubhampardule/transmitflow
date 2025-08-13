@@ -435,7 +435,7 @@ export default function P2PFileTransfer() {
             </div>
             
             <CardTitle className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent leading-tight pb-2">
-              RapidShare
+              TransferIt
             </CardTitle>
             <CardDescription className="text-lg text-muted-foreground">
               Lightning-fast peer-to-peer file sharing
@@ -489,7 +489,7 @@ export default function P2PFileTransfer() {
         {/* Website Info */}
         <div className="mt-6 w-full max-w-2xl text-center">
           <div className="text-black/80">
-            <h3 className="text-lg font-semibold mb-2">RapidShare</h3>
+            <h3 className="text-lg font-semibold mb-2">TransferIt</h3>
             <p className="text-sm text-black/70 mb-1">
               Lightning-fast peer-to-peer file sharing
             </p>
