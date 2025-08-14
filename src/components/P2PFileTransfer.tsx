@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Wifi, WifiOff, Zap, Shield, HardDrive, Leaf, TrendingUp, MessageCircle, Coffee, Globe } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Zap, Shield, HardDrive, Leaf, TrendingUp, MessageCircle, Coffee, Globe, Lock, ArrowLeftRight, Rocket, Users, Github } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TransferState } from '@/types';
@@ -493,87 +493,89 @@ export default function P2PFileTransfer() {
             <div className="mt-12 w-full max-w-4xl">
               {/* Features Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-                {/* WebRTC P2P Transfer */}
+                {/* True Peer-to-Peer */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 rounded-lg bg-blue-100">
-                      <Globe className="h-6 w-6 text-blue-600" />
+                      <ArrowLeftRight className="h-6 w-6 text-blue-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">WebRTC Magic</h3>
+                    <h3 className="text-lg font-semibold text-black/90">True Peer-to-Peer</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Direct device-to-device transfer using cutting-edge WebRTC technology.
+                    Files sent directly device-to-device using WebRTC. No cloud, no intermediaries.
                   </p>
                 </div>
 
-                {/* QR Code Sharing */}
+                {/* Absolute Privacy */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 rounded-lg bg-green-100">
-                      <svg className="h-6 w-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM19 13h2v2h-2zM13 13h2v2h-2zM15 15h2v2h-2zM13 17h2v2h-2zM15 19h2v2h-2zM17 17h2v2h-2zM17 13h2v2h-2zM19 15h2v2h-2z"/>
-                      </svg>
+                      <Lock className="h-6 w-6 text-green-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">QR Connect</h3>
+                    <h3 className="text-lg font-semibold text-black/90">Absolute Privacy</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Scan QR codes for instant connection - no typing, no setup required.
+                    Your files never touch our servers. We don't see, store, or track them.
                   </p>
                 </div>
 
-                {/* Browser Based */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-purple-100">
-                      <svg className="h-6 w-6 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                      </svg>
-                    </div>
-                    <h3 className="text-lg font-semibold text-black/90">No Apps</h3>
-                  </div>
-                  <p className="text-black/70 text-sm">
-                    Works instantly in any modern browser - no downloads or installations.
-                  </p>
-                </div>
-
-                {/* Zero Server Storage */}
+                {/* Secure & Encrypted */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 rounded-lg bg-red-100">
                       <Shield className="h-6 w-6 text-red-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Complete Privacy</h3>
+                    <h3 className="text-lg font-semibold text-black/90">Secure & Encrypted</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Files never touch our servers. Your data stays between your devices only.
+                    Secure connections with isolated rooms for end-to-end protection.
                   </p>
                 </div>
 
-                {/* Real-time Progress */}
+                {/* Limitless High-Speed */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 rounded-lg bg-indigo-100">
-                      <TrendingUp className="h-6 w-6 text-indigo-600" />
+                      <Rocket className="h-6 w-6 text-indigo-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Live Progress</h3>
+                    <h3 className="text-lg font-semibold text-black/90">Limitless High-Speed</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Real-time transfer speeds, progress tracking, and connection status.
+                    Transfer files of any size with smart chunking to maximize network speed.
                   </p>
                 </div>
 
-                {/* Cross Platform */}
+                {/* Universal Compatibility */}
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-lg bg-purple-100">
+                      <Globe className="h-6 w-6 text-purple-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-black/90">Universal Compatibility</h3>
+                  </div>
+                  <p className="text-black/70 text-sm">
+                    Works instantly in any modern browser on any platform. No app required.
+                  </p>
+                </div>
+
+                {/* Open & Community Driven */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 rounded-lg bg-teal-100">
-                      <svg className="h-6 w-6 text-teal-600" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z"/>
-                      </svg>
+                      <Users className="h-6 w-6 text-teal-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Any Device</h3>
+                    <h3 className="text-lg font-semibold text-black/90">Open & Community Driven</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Windows, Mac, iOS, Android - share between any devices seamlessly.
+                    Fully open-source for transparency. Help us improve on{' '}
+                    <a 
+                      href="https://github.com/10neWOlF/transmitflow" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-teal-600 hover:text-teal-700 font-medium"
+                    >
+                      GitHub
+                    </a>.
                   </p>
                 </div>
               </div>
