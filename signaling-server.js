@@ -73,7 +73,7 @@ app.get('/health', (req, res) => {
 // Root endpoint
 app.get('/', (req, res) => {
   res.status(200).json({
-    message: 'Sendify P2P Signaling Server',
+    message: 'TransmitFlow P2P Signaling Server',
     status: 'Running',
     version: '1.0.0',
     endpoints: {
