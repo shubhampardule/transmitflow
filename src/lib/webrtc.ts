@@ -144,12 +144,15 @@ export class WebRTCService {
       console.log('Connection state changed:', state);
       console.log('ICE connection state:', this.peerConnection!.iceConnectionState);
       console.log('ICE gathering state:', this.peerConnection!.iceGatheringState);
-      
       this.onConnectionStateChange?.(state);
-      
       if (state === 'connected') {
         this.clearConnectionTimeout();
         this.reportConnectionType();
+        // Start file transfer immediately for sender
+        if (this.role === 'sender' && this.dataChannel && this.dataChannel.readyState === 'open' && this.currentFiles.length > 0) {
+          console.log('Connection established, starting file transfer immediately');
+          this.startFileTransfer();
+        }
       } else if (state === 'failed') {
         console.error('WebRTC connection failed - likely NAT/firewall issue');
         this.onError?.('Connection failed. This usually means strict NAT/firewall is blocking the connection. Try using a VPN or mobile hotspot.');
