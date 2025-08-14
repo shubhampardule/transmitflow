@@ -32,16 +32,18 @@ const io = socketIO(server, {
         'https://sendify-ten.vercel.app',
         'https://sendify.vercel.app'
       ]
-      : true, // Allow ALL origins in development
+      : true,
     methods: ['GET', 'POST'],
     credentials: true
   },
-  transports: ['polling', 'websocket'],
+  transports: ['websocket', 'polling'], // Prefer WebSocket first
   allowEIO3: true,
-  pingTimeout: 120000, // Increased from 60000 for slower connections
-  pingInterval: 30000, // Increased from 25000
-  maxHttpBufferSize: 1e7, // 10MB for larger signaling messages
-  perMessageDeflate: false, // Disable compression for lower latency
+  pingTimeout: 60000,  // Reduced from 120000
+  pingInterval: 25000, // Reduced from 30000
+  maxHttpBufferSize: 1e7,
+  perMessageDeflate: false,
+  upgradeTimeout: 10000, // Add for faster WebSocket upgrade
+  allowUpgrades: true, // Ensure upgrades are allowed
 });
 
 // Health check endpoint
