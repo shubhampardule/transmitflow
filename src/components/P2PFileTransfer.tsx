@@ -422,21 +422,6 @@ export default function P2PFileTransfer() {
               <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500">
                 <Zap className="h-6 w-6 text-white" />
               </div>
-        {/* Unique About/Features Section for TransmitFlow */}
-        <div className="mt-12 w-full max-w-2xl mx-auto bg-white/90 rounded-xl shadow p-6 border border-gray-200">
-          <h2 className="text-2xl font-bold mb-3 text-blue-700">Why TransmitFlow?</h2>
-          <ul className="list-disc pl-5 space-y-3 text-black/80">
-            <li><span className="font-semibold">Direct Device-to-Device:</span> Files are sent straight from your device to the receiver, never stored on any server. Close your browser tab and your files are instantly inaccessible.</li>
-            <li><span className="font-semibold">No Limits, No Waiting:</span> Share files of any size or type—your bandwidth is the only limit. No signups, no storage quotas, no slow uploads.</li>
-            <li><span className="font-semibold">End-to-End Privacy:</span> Your data is encrypted from start to finish. Only you and your recipient can access the files, ensuring true privacy.</li>
-            <li><span className="font-semibold">Eco-Friendly Sharing:</span> By skipping cloud storage, TransmitFlow reduces energy use and your digital carbon footprint.</li>
-            <li><span className="font-semibold">Open & Accessible:</span> Works in any modern browser, on any device—no app required. Built for everyone, everywhere.</li>
-          </ul>
-          <div className="mt-4 text-black/70 text-sm">
-            Have questions? <a href="https://github.com/10neWOlF/transmitflow/issues" className="text-blue-600 hover:underline">Contact us</a> or check our documentation.<br/>
-            If you love TransmitFlow, <a href="https://buymeacoffee.com/10newolf" className="text-yellow-700 hover:underline font-semibold">buy me a coffee ☕</a> to support future development!
-          </div>
-        </div>
               <div className="flex items-center gap-2">
                 {isConnected ? (
                   <Wifi className="h-5 w-5 text-green-500" />
