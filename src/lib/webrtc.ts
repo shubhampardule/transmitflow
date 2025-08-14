@@ -10,38 +10,33 @@ export class WebRTCService {
   // Enhanced configuration with TURN servers
   private readonly config: RTCConfiguration = {
     iceServers: [
-      // Google STUN servers (for local/simple NAT)
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
       { urls: 'stun:stun4.l.google.com:19302' },
-      // Additional STUN servers for redundancy
       { urls: 'stun:stun.services.mozilla.com' },
       { urls: 'stun:stun.stunprotocol.org:3478' },
-      // User's Metered.ca TURN credentials
-      {
-        urls: "stun:stun.relay.metered.ca:80",
-      },
+      { urls: "stun:stun.relay.metered.ca:80" },
       {
         urls: "turn:standard.relay.metered.ca:80",
-        username: "d068daecc910a93b85f34749",
-        credential: "ncHXMnuJwawUQXTC",
+        username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME,
+        credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL,
       },
       {
         urls: "turn:standard.relay.metered.ca:80?transport=tcp",
-        username: "d068daecc910a93b85f34749",
-        credential: "ncHXMnuJwawUQXTC",
+        username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME,
+        credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL,
       },
       {
         urls: "turn:standard.relay.metered.ca:443",
-        username: "d068daecc910a93b85f34749",
-        credential: "ncHXMnuJwawUQXTC",
+        username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME,
+        credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL,
       },
       {
         urls: "turns:standard.relay.metered.ca:443?transport=tcp",
-        username: "d068daecc910a93b85f34749",
-        credential: "ncHXMnuJwawUQXTC",
+        username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME,
+        credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL,
       },
     ],
     
