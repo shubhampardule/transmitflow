@@ -28,8 +28,8 @@ export class WebRTCService {
   };
 
   // Aggressive transfer settings for LAN/fast connections
-  private readonly chunkSize = 256 * 1024; // 256KB chunks for fast networks
-  private readonly maxBufferSize = 16 * 1024 * 1024; // 16MB buffer for speed
+  private readonly chunkSize = 64 * 1024; // 64KB chunks (original stable setting)
+  private readonly maxBufferSize = 8 * 1024 * 1024; // 8MB max buffer (original stable setting)
 
   // Event handlers
   public onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
