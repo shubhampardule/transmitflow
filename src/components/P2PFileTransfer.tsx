@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Wifi, WifiOff, Zap } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Zap, Shield, HardDrive, Leaf, TrendingUp, MessageCircle, Coffee, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TransferState } from '@/types';
@@ -485,6 +485,123 @@ export default function P2PFileTransfer() {
             )}
           </CardContent>
         </Card>
+        
+        {/* Features Section - Only show when idle */}
+        {transferState.status === 'idle' && (
+          <>
+            {/* What is TransmitFlow Section */}
+            <div className="mt-12 w-full max-w-4xl">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-bold text-black/90 mb-4">What is TransmitFlow?</h2>
+                <p className="text-lg text-black/70 max-w-3xl mx-auto">
+                  A free peer-to-peer file sharing service that prioritizes your privacy. 
+                  Files are shared directly between devices with end-to-end encryption.
+                </p>
+              </div>
+
+              {/* Features Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+                {/* Direct Device Sharing */}
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-lg bg-blue-100">
+                      <Globe className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-black/90">Direct Sharing</h3>
+                  </div>
+                  <p className="text-black/70 text-sm">
+                    Files transfer directly between devices. Close your browser to stop sharing instantly.
+                  </p>
+                </div>
+
+                {/* No File Limits */}
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-lg bg-green-100">
+                      <HardDrive className="h-6 w-6 text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-black/90">No Limits</h3>
+                  </div>
+                  <p className="text-black/70 text-sm">
+                    Share files of any size. No storage means no restrictions on your transfers.
+                  </p>
+                </div>
+
+                {/* End-to-End Encryption */}
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-lg bg-purple-100">
+                      <Shield className="h-6 w-6 text-purple-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-black/90">Secure Transfer</h3>
+                  </div>
+                  <p className="text-black/70 text-sm">
+                    Only you and the receiver can access files. Encrypted with DTLS 1.3 technology.
+                  </p>
+                </div>
+
+                {/* Eco-Friendly */}
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-lg bg-emerald-100">
+                      <Leaf className="h-6 w-6 text-emerald-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-black/90">Eco-Friendly</h3>
+                  </div>
+                  <p className="text-black/70 text-sm">
+                    No servers needed means lower energy consumption and smaller carbon footprint.
+                  </p>
+                </div>
+
+                {/* Growing Service */}
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-lg bg-orange-100">
+                      <TrendingUp className="h-6 w-6 text-orange-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-black/90">Growing Fast</h3>
+                  </div>
+                  <p className="text-black/70 text-sm">
+                    Trusted by thousands of users transferring terabytes of data monthly.
+                  </p>
+                </div>
+
+                {/* Support */}
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-lg bg-pink-100">
+                      <MessageCircle className="h-6 w-6 text-pink-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-black/90">Need Help?</h3>
+                  </div>
+                  <p className="text-black/70 text-sm">
+                    Questions about privacy or how it works? Feel free to reach out anytime.
+                  </p>
+                </div>
+              </div>
+
+              {/* Support Section */}
+              <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-6 border border-white/50 text-center">
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <Coffee className="h-6 w-6 text-orange-600" />
+                  <h3 className="text-xl font-semibold text-black/90">Support Our Work</h3>
+                </div>
+                <p className="text-black/70 mb-4">
+                  Love using TransmitFlow? Help us keep it free and running smoothly!
+                </p>
+                <a
+                  href="https://buymeacoffee.com/10newolf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200"
+                >
+                  <Coffee className="h-5 w-5" />
+                  Buy me a coffee ☕
+                </a>
+              </div>
+            </div>
+          </>
+        )}
         
         {/* Website Info */}
         <div className="mt-6 w-full max-w-2xl text-center">
