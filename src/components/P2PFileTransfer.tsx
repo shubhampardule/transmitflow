@@ -489,93 +489,91 @@ export default function P2PFileTransfer() {
         {/* Features Section - Only show when idle */}
         {transferState.status === 'idle' && (
           <>
-            {/* What is TransmitFlow Section */}
+            {/* Features Section */}
             <div className="mt-12 w-full max-w-4xl">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold text-black/90 mb-4">What is TransmitFlow?</h2>
-                <p className="text-lg text-black/70 max-w-3xl mx-auto">
-                  A free peer-to-peer file sharing service that prioritizes your privacy. 
-                  Files are shared directly between devices with end-to-end encryption.
-                </p>
-              </div>
-
               {/* Features Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-                {/* Direct Device Sharing */}
+                {/* WebRTC P2P Transfer */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 rounded-lg bg-blue-100">
                       <Globe className="h-6 w-6 text-blue-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Direct Sharing</h3>
+                    <h3 className="text-lg font-semibold text-black/90">WebRTC Magic</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Files transfer directly between devices. Close your browser to stop sharing instantly.
+                    Direct device-to-device transfer using cutting-edge WebRTC technology.
                   </p>
                 </div>
 
-                {/* No File Limits */}
+                {/* QR Code Sharing */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 rounded-lg bg-green-100">
-                      <HardDrive className="h-6 w-6 text-green-600" />
+                      <svg className="h-6 w-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zM3 21h8v-8H3v8zm2-6h4v4H5v-4zM13 3v8h8V3h-8zm6 6h-4V5h4v4zM19 13h2v2h-2zM13 13h2v2h-2zM15 15h2v2h-2zM13 17h2v2h-2zM15 19h2v2h-2zM17 17h2v2h-2zM17 13h2v2h-2zM19 15h2v2h-2z"/>
+                      </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">No Limits</h3>
+                    <h3 className="text-lg font-semibold text-black/90">QR Connect</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Share files of any size. No storage means no restrictions on your transfers.
+                    Scan QR codes for instant connection - no typing, no setup required.
                   </p>
                 </div>
 
-                {/* End-to-End Encryption */}
+                {/* Browser Based */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 rounded-lg bg-purple-100">
-                      <Shield className="h-6 w-6 text-purple-600" />
+                      <svg className="h-6 w-6 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                      </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Secure Transfer</h3>
+                    <h3 className="text-lg font-semibold text-black/90">No Apps</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Only you and the receiver can access files. Encrypted with DTLS 1.3 technology.
+                    Works instantly in any modern browser - no downloads or installations.
                   </p>
                 </div>
 
-                {/* Eco-Friendly */}
+                {/* Zero Server Storage */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-emerald-100">
-                      <Leaf className="h-6 w-6 text-emerald-600" />
+                    <div className="p-2 rounded-lg bg-red-100">
+                      <Shield className="h-6 w-6 text-red-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Eco-Friendly</h3>
+                    <h3 className="text-lg font-semibold text-black/90">Complete Privacy</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    No servers needed means lower energy consumption and smaller carbon footprint.
+                    Files never touch our servers. Your data stays between your devices only.
                   </p>
                 </div>
 
-                {/* Growing Service */}
+                {/* Real-time Progress */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-orange-100">
-                      <TrendingUp className="h-6 w-6 text-orange-600" />
+                    <div className="p-2 rounded-lg bg-indigo-100">
+                      <TrendingUp className="h-6 w-6 text-indigo-600" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Growing Fast</h3>
+                    <h3 className="text-lg font-semibold text-black/90">Live Progress</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Trusted by thousands of users transferring terabytes of data monthly.
+                    Real-time transfer speeds, progress tracking, and connection status.
                   </p>
                 </div>
 
-                {/* Support */}
+                {/* Cross Platform */}
                 <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-pink-100">
-                      <MessageCircle className="h-6 w-6 text-pink-600" />
+                    <div className="p-2 rounded-lg bg-teal-100">
+                      <svg className="h-6 w-6 text-teal-600" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z"/>
+                      </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Need Help?</h3>
+                    <h3 className="text-lg font-semibold text-black/90">Any Device</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Questions about privacy or how it works? Feel free to reach out anytime.
+                    Windows, Mac, iOS, Android - share between any devices seamlessly.
                   </p>
                 </div>
               </div>
