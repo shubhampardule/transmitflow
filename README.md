@@ -602,7 +602,7 @@ All contributors get:
 
 [![Star on GitHub](https://img.shields.io/badge/⭐-Star%20on%20GitHub-yellow?style=for-the-badge)](https://github.com/10neWOlF/transmitflow)
 [![Share on Twitter](https://img.shields.io/badge/🐦-Share%20on%20Twitter-1da1f2?style=for-the-badge)](https://twitter.com/intent/tweet?text=Check%20out%20this%20awesome%20P2P%20file%20transfer%20app!&url=https://github.com/10neWOlF/transmitflow&via=ShubhamPardule)
-[![Buy Me a Coffee](https://img.shields.io/badge/☕-Buy%20Me%20a%20Coffee-orange?style=for-the-badge)](https://buymeacoffee.com/ShubhamPardule)
+[![Buy Me a Coffee](https://img.shields.io/badge/☕-Buy%20Me%20a%20Coffee-orange?style=for-the-badge)](https://buymeacoffee.com/10newolf)
 
 </div>
 

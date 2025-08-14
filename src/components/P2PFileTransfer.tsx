@@ -507,6 +507,21 @@ export default function P2PFileTransfer() {
             </div>
             <div className="flex items-center gap-4">
               <a
+                href="https://buymeacoffee.com/10newolf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-black rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105"
+                title="Buy Me a Coffee"
+              >
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M20.216 6.415l-.132-.666c-.119-.598-.388-1.163-.766-1.658A4.389 4.389 0 0 0 15.5 2.5h-7c-1.103 0-2.103.897-2.103 2v.5c0 .8.4 1.5 1 1.9v8.1c0 2.2 1.8 4 4 4h3c2.2 0 4-1.8 4-4V6.9c.6-.4 1-1.1 1-1.9v-.5c0-.138-.011-.273-.032-.406-.012-.067-.024-.133-.037-.198-.025-.129-.053-.256-.084-.382zm-2.216 8.585c0 1.1-.9 2-2 2h-3c-1.1 0-2-.9-2-2V7h7v8z"/>
+                  <circle cx="7" cy="10" r="1"/>
+                  <circle cx="11" cy="10" r="1"/>
+                  <circle cx="15" cy="10" r="1"/>
+                </svg>
+                <span className="text-sm">Support Us</span>
+              </a>
+              <a
                 href="https://github.com/10neWOlF"
                 target="_blank"
                 rel="noopener noreferrer"
