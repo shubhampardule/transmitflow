@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Wifi, WifiOff, Zap, Shield, HardDrive, Leaf, TrendingUp, MessageCircle, Coffee, Globe, Lock, ArrowLeftRight, Rocket, Users, Github } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Zap, Shield, Coffee, Globe, Lock, ArrowLeftRight, Rocket, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TransferState } from '@/types';
