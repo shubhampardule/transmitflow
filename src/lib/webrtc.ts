@@ -7,27 +7,64 @@ export class WebRTCService {
   private roomCode: string = '';
   private role: 'sender' | 'receiver' | null = null;
   
-  // Configuration
+  // Enhanced configuration with TURN servers
   private readonly config: RTCConfiguration = {
     iceServers: [
+      // Google STUN servers (for local/simple NAT)
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+      // Additional STUN servers for redundancy
+      { urls: 'stun:stun.services.mozilla.com' },
+      { urls: 'stun:stun.stunprotocol.org:3478' },
+      // User's Metered.ca TURN credentials
+      {
+        urls: "stun:stun.relay.metered.ca:80",
+      },
+      {
+        urls: "turn:standard.relay.metered.ca:80",
+        username: "d068daecc910a93b85f34749",
+        credential: "ncHXMnuJwawUQXTC",
+      },
+      {
+        urls: "turn:standard.relay.metered.ca:80?transport=tcp",
+        username: "d068daecc910a93b85f34749",
+        credential: "ncHXMnuJwawUQXTC",
+      },
+      {
+        urls: "turn:standard.relay.metered.ca:443",
+        username: "d068daecc910a93b85f34749",
+        credential: "ncHXMnuJwawUQXTC",
+      },
+      {
+        urls: "turns:standard.relay.metered.ca:443?transport=tcp",
+        username: "d068daecc910a93b85f34749",
+        credential: "ncHXMnuJwawUQXTC",
+      },
     ],
+    
+    // Enhanced ICE configuration for better NAT traversal
+    iceTransportPolicy: 'all', // Use both STUN and TURN
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require',
+    iceCandidatePoolSize: 10, // Pre-gather ICE candidates for faster connection
   };
 
-  private readonly chunkSize = 64 * 1024; // 64KB chunks (original stable setting)
-  private readonly maxBufferSize = 8 * 1024 * 1024; // 8MB max buffer (original stable setting)
+  // Optimized transfer settings for cross-network
+  private readonly chunkSize = 16 * 1024; // Reduced to 16KB for better reliability over TURN
+  private readonly maxBufferSize = 1 * 1024 * 1024; // Reduced to 1MB for TURN relay
 
   // Event handlers
   public onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
   public onDataChannelOpen?: () => void;
   public onDataChannelClose?: () => void;
   public onFileReceived?: (file: File) => void;
-  public onIncomingFiles?: (files: FileMetadata[]) => void; // New callback for incoming file list
+  public onIncomingFiles?: (files: FileMetadata[]) => void;
   public onTransferProgress?: (progress: { 
     fileName: string; 
-    fileIndex: number; // Add file index to progress
+    fileIndex: number;
     progress: number; 
     bytesTransferred: number; 
     totalBytes: number;
@@ -37,6 +74,8 @@ export class WebRTCService {
   public onTransferCancelled?: (cancelledBy: 'sender' | 'receiver') => void;
   public onFileCancelled?: (data: { fileIndex: number; fileName: string; cancelledBy: 'sender' | 'receiver' }) => void;
   public onError?: (error: string) => void;
+  public onIceGatheringStateChange?: (state: RTCIceGatheringState) => void;
+  public onConnectionInfo?: (info: { localType?: string; remoteType?: string; protocol?: string }) => void;
 
   // Transfer state
   private currentFiles: File[] = [];
@@ -45,8 +84,10 @@ export class WebRTCService {
   private currentFileMeta: FileMetadata | null = null;
   private transferStartTime = 0;
   private receivedBytes = 0;
-  private lastProgressSync = 0; // Throttle progress sync messages
-  private cancelledFileIndices = new Set<number>(); // Track cancelled files
+  private lastProgressSync = 0;
+  private cancelledFileIndices = new Set<number>();
+  private iceGatheringTimeout: NodeJS.Timeout | null = null;
+  private connectionTimeout: NodeJS.Timeout | null = null;
 
   // Getters
   get currentRole(): 'sender' | 'receiver' | null {
@@ -61,8 +102,16 @@ export class WebRTCService {
     await this.createPeerConnection();
     this.createDataChannel();
     
-    // Create offer
-    const offer = await this.peerConnection!.createOffer();
+    // Wait for ICE gathering to complete or timeout
+    await this.waitForIceGathering();
+    
+    // Create offer with specific options for better compatibility
+    const offer = await this.peerConnection!.createOffer({
+      offerToReceiveAudio: false,
+      offerToReceiveVideo: false,
+  // voiceActivityDetection: false // Removed: not a valid RTCOfferOptions property
+    });
+    
     await this.peerConnection!.setLocalDescription(offer);
     
     signalingService.sendSignal({
@@ -70,6 +119,9 @@ export class WebRTCService {
       payload: offer,
       toRoom: roomCode,
     });
+
+    // Set connection timeout
+    this.setConnectionTimeout();
   }
 
   async initializeAsReceiver(roomCode: string): Promise<void> {
@@ -78,27 +130,63 @@ export class WebRTCService {
 
     await this.createPeerConnection();
     this.setupDataChannelReceiver();
+    
+    // Set connection timeout
+    this.setConnectionTimeout();
   }
 
   private async createPeerConnection(): Promise<void> {
     this.peerConnection = new RTCPeerConnection(this.config);
 
+    // Enhanced connection state monitoring
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection!.connectionState;
       console.log('Connection state changed:', state);
       console.log('ICE connection state:', this.peerConnection!.iceConnectionState);
       console.log('ICE gathering state:', this.peerConnection!.iceGatheringState);
+      
       this.onConnectionStateChange?.(state);
       
-      if (state === 'failed') {
-        console.error('WebRTC connection failed');
-        this.onError?.('WebRTC connection failed');
+      if (state === 'connected') {
+        this.clearConnectionTimeout();
+        this.reportConnectionType();
+      } else if (state === 'failed') {
+        console.error('WebRTC connection failed - likely NAT/firewall issue');
+        this.onError?.('Connection failed. This usually means strict NAT/firewall is blocking the connection. Try using a VPN or mobile hotspot.');
+      } else if (state === 'disconnected') {
+        // Try to reconnect
+        this.attemptReconnection();
       }
     };
 
+    // Monitor ICE connection state separately
+    this.peerConnection.oniceconnectionstatechange = () => {
+      const state = this.peerConnection!.iceConnectionState;
+      console.log('ICE connection state:', state);
+      
+      if (state === 'failed') {
+        console.error('ICE connection failed - checking if we need to restart ICE');
+        this.restartIce();
+      }
+    };
+
+    // Monitor ICE gathering
+    this.peerConnection.onicegatheringstatechange = () => {
+      const state = this.peerConnection!.iceGatheringState;
+      console.log('ICE gathering state:', state);
+      this.onIceGatheringStateChange?.(state);
+    };
+
+    // Enhanced ICE candidate handling
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('ICE candidate generated:', event.candidate.candidate);
+        console.log('ICE candidate generated:');
+        console.log('  Type:', event.candidate.type);
+        console.log('  Protocol:', event.candidate.protocol);
+        console.log('  Address:', event.candidate.address || 'hidden');
+        console.log('  Port:', event.candidate.port);
+        
+        // Send all candidates including relay (TURN) candidates
         signalingService.sendSignal({
           type: 'ice',
           payload: event.candidate,
@@ -106,6 +194,10 @@ export class WebRTCService {
         });
       } else {
         console.log('ICE gathering completed');
+        if (this.iceGatheringTimeout) {
+          clearTimeout(this.iceGatheringTimeout);
+          this.iceGatheringTimeout = null;
+        }
       }
     };
 
@@ -113,14 +205,132 @@ export class WebRTCService {
     signalingService.onSignal(this.handleSignalingMessage.bind(this));
   }
 
+  private async waitForIceGathering(): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.peerConnection!.iceGatheringState === 'complete') {
+        resolve();
+        return;
+      }
+
+      // Set a timeout for ICE gathering (10 seconds should be enough)
+      this.iceGatheringTimeout = setTimeout(() => {
+        console.log('ICE gathering timeout - proceeding anyway');
+        resolve();
+      }, 10000);
+
+      const checkGatheringState = () => {
+        if (this.peerConnection!.iceGatheringState === 'complete') {
+          if (this.iceGatheringTimeout) {
+            clearTimeout(this.iceGatheringTimeout);
+            this.iceGatheringTimeout = null;
+          }
+          resolve();
+        } else {
+          setTimeout(checkGatheringState, 100);
+        }
+      };
+      
+      checkGatheringState();
+    });
+  }
+
+  private setConnectionTimeout(): void {
+    // 30 second timeout for connection establishment
+    this.connectionTimeout = setTimeout(() => {
+      if (this.peerConnection?.connectionState !== 'connected') {
+        console.error('Connection timeout - failed to establish connection');
+        this.onError?.('Connection timeout. Please check your network settings and try again. If using strict firewall, try mobile hotspot.');
+        this.cleanup();
+      }
+    }, 30000);
+  }
+
+  private clearConnectionTimeout(): void {
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
+    }
+  }
+
+  private async restartIce(): Promise<void> {
+    try {
+      console.log('Attempting ICE restart...');
+      
+      // Create new offer with ICE restart
+      const offer = await this.peerConnection!.createOffer({ iceRestart: true });
+      await this.peerConnection!.setLocalDescription(offer);
+      
+      signalingService.sendSignal({
+        type: 'offer',
+        payload: offer,
+        toRoom: this.roomCode,
+      });
+    } catch (error) {
+      console.error('ICE restart failed:', error);
+    }
+  }
+
+  private async attemptReconnection(): Promise<void> {
+    console.log('Attempting to reconnect...');
+    
+    // Wait a bit to see if connection recovers
+    setTimeout(() => {
+      if (this.peerConnection?.connectionState === 'disconnected') {
+        this.restartIce();
+      }
+    }, 2000);
+  }
+
+  private reportConnectionType(): void {
+    // Get connection statistics to understand what type of connection was established
+    this.peerConnection?.getStats().then(stats => {
+      stats.forEach(report => {
+        if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+          const info: Record<string, unknown> = {};
+          
+          if (report.localCandidateId) {
+            stats.forEach(candidate => {
+              if (candidate.id === report.localCandidateId) {
+                info.localType = candidate.candidateType;
+                info.protocol = candidate.protocol;
+              }
+            });
+          }
+          
+          if (report.remoteCandidateId) {
+            stats.forEach(candidate => {
+              if (candidate.id === report.remoteCandidateId) {
+                info.remoteType = candidate.candidateType;
+              }
+            });
+          }
+          
+          console.log('Connection established via:', info);
+          this.onConnectionInfo?.(info);
+          
+          // Warn if using relay (TURN)
+          if (info.localType === 'relay' || info.remoteType === 'relay') {
+            console.log('Using TURN relay server - transfer might be slower');
+          }
+        }
+      });
+    });
+  }
+
   private createDataChannel(): void {
     console.log('Creating data channel...');
+    
+    // Enhanced data channel configuration for reliability
     this.dataChannel = this.peerConnection!.createDataChannel('file-transfer', {
       ordered: true,
-      maxRetransmits: 0,
+      maxRetransmits: 3, // Allow some retransmits for reliability
+      maxPacketLifeTime: undefined, // No time limit
+      protocol: 'file-transfer-v1'
     });
 
     this.dataChannel.binaryType = 'arraybuffer';
+    this.dataChannel.bufferedAmountLowThreshold = this.chunkSize * 2; // Set low threshold
+    
     console.log('Data channel created with ID:', this.dataChannel.id);
     this.setupDataChannelHandlers();
   }
@@ -129,6 +339,7 @@ export class WebRTCService {
     this.peerConnection!.ondatachannel = (event) => {
       this.dataChannel = event.channel;
       this.dataChannel.binaryType = 'arraybuffer';
+      this.dataChannel.bufferedAmountLowThreshold = this.chunkSize * 2;
       this.setupDataChannelHandlers();
     };
   }
@@ -140,13 +351,9 @@ export class WebRTCService {
       console.log('Data channel opened');
       this.onDataChannelOpen?.();
       
-      // Start file transfer if sender
       if (this.role === 'sender' && this.currentFiles.length > 0) {
-        console.log('Data channel opened - starting file transfer as sender');
-        console.log('Files to transfer:', this.currentFiles.length);
+        console.log('Starting file transfer as sender');
         this.startFileTransfer();
-      } else {
-        console.log('Data channel opened - role:', this.role, 'files:', this.currentFiles.length);
       }
     };
 
@@ -158,6 +365,10 @@ export class WebRTCService {
     this.dataChannel.onerror = (error) => {
       console.error('Data channel error:', error);
       this.onError?.('Data channel error occurred');
+    };
+
+    this.dataChannel.onbufferedamountlow = () => {
+      console.log('Buffer amount low - ready for more data');
     };
 
     this.dataChannel.onmessage = (event) => {
@@ -175,6 +386,10 @@ export class WebRTCService {
         case 'offer':
           if (this.role === 'receiver') {
             await this.peerConnection!.setRemoteDescription(message.payload);
+            
+            // Wait for ICE gathering before sending answer
+            await this.waitForIceGathering();
+            
             const answer = await this.peerConnection!.createAnswer();
             await this.peerConnection!.setLocalDescription(answer);
             
@@ -193,7 +408,14 @@ export class WebRTCService {
           break;
 
         case 'ice':
-          await this.peerConnection!.addIceCandidate(message.payload);
+          // Add ICE candidate
+          try {
+            await this.peerConnection!.addIceCandidate(message.payload);
+            console.log('Added ICE candidate successfully');
+          } catch (error) {
+            console.error('Error adding ICE candidate:', error);
+            // Continue anyway - some candidates might fail
+          }
           break;
       }
     } catch (error) {
@@ -203,14 +425,8 @@ export class WebRTCService {
   }
 
   private async startFileTransfer(): Promise<void> {
-    console.log('startFileTransfer called');
-    console.log('currentFiles:', this.currentFiles);
-    if (this.currentFiles.length === 0) {
-      console.log('No files to transfer');
-      return;
-    }
+    if (this.currentFiles.length === 0) return;
 
-    // Send file list to receiver first
     const fileList: FileMetadata[] = this.currentFiles.map((file, index) => ({
       name: file.name,
       size: file.size,
@@ -229,23 +445,15 @@ export class WebRTCService {
     this.transferStartTime = Date.now();
     this.currentFileIndex = 0;
     
-    console.log('Starting transfer of first file:', this.currentFiles[0].name);
     await this.sendFile(this.currentFiles[0]);
   }
 
   private async sendFile(file: File): Promise<void> {
-    console.log('sendFile called for:', file.name, 'size:', file.size);
-    
-    // Check if this file has been cancelled
     if (this.cancelledFileIndices.has(this.currentFileIndex)) {
-      console.log('Skipping cancelled file:', file.name, 'at index:', this.currentFileIndex);
-      // Move to next file
       this.currentFileIndex++;
       if (this.currentFileIndex < this.currentFiles.length) {
-        console.log('Moving to next file after cancelled one...');
         await this.sendFile(this.currentFiles[this.currentFileIndex]);
       } else {
-        console.log('All files processed (some cancelled), sending completion signal');
         this.sendTextMessage({ type: 'transfer-complete' });
         this.onTransferComplete?.();
       }
@@ -260,26 +468,16 @@ export class WebRTCService {
       fileIndex: this.currentFileIndex,
     };
 
-    console.log('Sending file metadata:', metadata);
-    // Send file metadata
     this.sendTextMessage({
       type: 'file-meta',
       data: metadata,
     });
 
-    console.log('Reading file as ArrayBuffer...');
-    // Send file data in chunks
     const arrayBuffer = await file.arrayBuffer();
     const totalChunks = Math.ceil(arrayBuffer.byteLength / this.chunkSize);
     
-    console.log('File read successfully. Total chunks:', totalChunks);
-    
     for (let i = 0; i < totalChunks; i++) {
-      // Check if file was cancelled during transfer
       if (this.cancelledFileIndices.has(this.currentFileIndex)) {
-        console.log('File was cancelled during transfer, stopping current file only:', file.name);
-        // Just stop this file, don't try to move to next file automatically
-        // Let the natural flow handle the next file
         return;
       }
       
@@ -287,35 +485,35 @@ export class WebRTCService {
       const end = Math.min(start + this.chunkSize, arrayBuffer.byteLength);
       const chunk = arrayBuffer.slice(start, end);
       
-      console.log(`Preparing chunk ${i + 1}/${totalChunks}, size: ${chunk.byteLength}`);
-      console.log(`Current buffer amount: ${this.dataChannel!.bufferedAmount}`);
-      
-      // Wait for buffer to be available with timeout
+      // Enhanced buffer management with exponential backoff
       let attempts = 0;
-      const maxAttempts = 1000; // 10 seconds timeout (original setting)
+      let backoffMs = 10;
+      const maxAttempts = 2000; // Increased timeout for TURN connections
+      
       while (this.dataChannel!.bufferedAmount > this.maxBufferSize && attempts < maxAttempts) {
-        console.log(`Waiting for buffer to clear... (${this.dataChannel!.bufferedAmount}/${this.maxBufferSize})`);
-        await new Promise(resolve => setTimeout(resolve, 10)); // Original 10ms timing
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        backoffMs = Math.min(backoffMs * 1.5, 100); // Exponential backoff up to 100ms
         attempts++;
       }
       
       if (attempts >= maxAttempts) {
         console.error('Buffer timeout - transfer may have failed');
-        this.onError?.('Transfer timeout - data channel buffer full');
+        this.onError?.('Transfer timeout - connection may be too slow');
         return;
       }
       
       try {
-        console.log(`Sending chunk ${i + 1}/${totalChunks}`);
         this.dataChannel!.send(chunk);
-        console.log(`Chunk ${i + 1} sent successfully`);
         
-        // Add small delay between chunks to prevent overwhelming
+        // Adaptive delay based on connection type
         if (i < totalChunks - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1)); // Back to original 1ms delay
+          // Longer delay for TURN connections
+          const delay = this.dataChannel!.bufferedAmount > this.chunkSize * 4 ? 10 : 2;
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       } catch (error) {
         console.error(`Error sending chunk ${i + 1}:`, error);
+        this.onError?.('Failed to send file chunk');
         return;
       }
       
@@ -332,12 +530,9 @@ export class WebRTCService {
         speed,
       };
       
-      console.log(`Progress update - Progress: ${progress}%, Speed: ${speed} bytes/sec, Bytes: ${end}/${file.size}`);
-      
-      // Send progress to local callback
       this.onTransferProgress?.(progressData);
       
-      // Send progress sync to receiver (throttled to every 500ms or at completion)
+      // Send progress sync to receiver
       const now = Date.now();
       if (now - this.lastProgressSync > 500 || progress >= 100) {
         this.sendTextMessage({
@@ -348,14 +543,11 @@ export class WebRTCService {
       }
     }
 
-    console.log('File transfer completed for:', file.name);
-    // Move to next file or complete transfer
+    // Move to next file
     this.currentFileIndex++;
     if (this.currentFileIndex < this.currentFiles.length) {
-      console.log('Moving to next file...');
       await this.sendFile(this.currentFiles[this.currentFileIndex]);
     } else {
-      console.log('All files transferred, sending completion signal');
       this.sendTextMessage({ type: 'transfer-complete' });
       this.onTransferComplete?.();
     }
@@ -365,23 +557,17 @@ export class WebRTCService {
     switch (message.type) {
       case 'file-list':
         const fileList = message.data as FileMetadata[];
-        console.log('Received file list:', fileList);
         this.onIncomingFiles?.(fileList);
         break;
 
       case 'file-meta':
         this.currentFileMeta = message.data as FileMetadata;
-        this.currentFileIndex = this.currentFileMeta.fileIndex; // Set the current file index from metadata
+        this.currentFileIndex = this.currentFileMeta.fileIndex;
         this.receiveBuffers = [];
         this.receivedBytes = 0;
         
-        // Set transfer start time for receiver when first file meta is received
         if (this.transferStartTime === 0) {
           this.transferStartTime = Date.now();
-        }
-        
-        if (this.currentFileMeta) {
-          console.log('Receiving file:', this.currentFileMeta.name, 'at index:', this.currentFileIndex);
         }
         break;
 
@@ -396,15 +582,9 @@ export class WebRTCService {
 
       case 'file-cancelled':
         const fileCancelData = message.data as { fileIndex: number; fileName: string; cancelledBy: 'sender' | 'receiver' };
-        console.log('File cancelled:', fileCancelData);
-        console.log('Received cancellation from:', fileCancelData.cancelledBy, 'My role is:', this.role);
-        
-        // Track the cancelled file
         this.cancelledFileIndices.add(fileCancelData.fileIndex);
         
-        // If this is the current file being received, stop receiving it
         if (this.currentFileIndex === fileCancelData.fileIndex && this.currentFileMeta) {
-          console.log('Stopping current file reception due to cancellation');
           this.currentFileMeta = null;
           this.receiveBuffers = [];
           this.receivedBytes = 0;
@@ -415,51 +595,28 @@ export class WebRTCService {
 
       case 'progress-sync':
         const progressData = message.data as FileTransferProgress;
-        console.log('Received progress sync from sender:', progressData);
         this.onTransferProgress?.(progressData);
         break;
     }
   }
 
   private handleBinaryData(data: ArrayBuffer): void {
-    if (!this.currentFileMeta) {
-      console.log('Received binary data but no currentFileMeta - ignoring');
-      return;
-    }
+    if (!this.currentFileMeta) return;
 
     this.receiveBuffers.push(data);
     this.receivedBytes += data.byteLength;
 
-    console.log(`Chunk received: ${this.receivedBytes}/${this.currentFileMeta.size} bytes (${Math.round(this.receivedBytes/this.currentFileMeta.size*100)}%)`);
-
-    // Check if file is complete
     if (this.receivedBytes >= this.currentFileMeta.size) {
-      console.log('=== FILE COMPLETE ===');
-      console.log('File name:', this.currentFileMeta.name);
-      console.log('File size:', this.currentFileMeta.size);
-      console.log('Bytes received:', this.receivedBytes);
-      console.log('Current file index:', this.currentFileIndex);
-      console.log('Cancelled indices:', Array.from(this.cancelledFileIndices));
-      
       const blob = new Blob(this.receiveBuffers, { type: this.currentFileMeta.type });
-      console.log('Blob created - size:', blob.size);
-      
       const file = new File([blob], this.currentFileMeta.name, {
         type: this.currentFileMeta.type,
         lastModified: this.currentFileMeta.lastModified,
       });
-      console.log('File object created:', file.name, file.size);
 
-      // ALWAYS call onFileReceived - ignore cancellation for now
-      console.log('About to call onFileReceived...');
       if (this.onFileReceived) {
         this.onFileReceived(file);
-        console.log('onFileReceived called successfully');
-      } else {
-        console.error('onFileReceived callback is null/undefined!');
       }
       
-      // Reset for next file
       this.currentFileMeta = null;
       this.receiveBuffers = [];
       this.receivedBytes = 0;
@@ -467,25 +624,17 @@ export class WebRTCService {
   }
 
   private sendTextMessage(message: DataChannelMessage): void {
-    console.log('sendTextMessage called:', message.type);
-    console.log('dataChannel state:', this.dataChannel?.readyState);
     if (this.dataChannel?.readyState === 'open') {
-      console.log('Sending message via data channel:', message);
       this.dataChannel.send(JSON.stringify(message));
-    } else {
-      console.log('Data channel not open, cannot send message');
     }
   }
 
   private calculateSpeed(bytesTransferred: number): number {
-    if (this.transferStartTime === 0 || bytesTransferred === 0) {
-      return 0;
-    }
+    if (this.transferStartTime === 0 || bytesTransferred === 0) return 0;
     
     const elapsed = (Date.now() - this.transferStartTime) / 1000;
     const speed = elapsed > 0 ? bytesTransferred / elapsed : 0;
     
-    // Return a valid number, avoid NaN or Infinity
     return isFinite(speed) ? Math.max(0, speed) : 0;
   }
 
@@ -501,14 +650,9 @@ export class WebRTCService {
   }
 
   cancelFile(fileIndex: number, fileName: string): void {
-    console.log('Cancelling file:', fileName, 'at index:', fileIndex);
-    console.log('WebRTC service role when cancelling:', this.role);
-    
-    // Track cancelled file locally
     this.cancelledFileIndices.add(fileIndex);
     
     if (this.role) {
-      console.log('Sending file cancellation message with role:', this.role);
       this.sendTextMessage({
         type: 'file-cancelled',
         data: { 
@@ -517,12 +661,17 @@ export class WebRTCService {
           cancelledBy: this.role 
         },
       });
-    } else {
-      console.log('No role set, cannot send cancellation message');
     }
   }
 
   cleanup(): void {
+    this.clearConnectionTimeout();
+    
+    if (this.iceGatheringTimeout) {
+      clearTimeout(this.iceGatheringTimeout);
+      this.iceGatheringTimeout = null;
+    }
+    
     if (this.dataChannel) {
       this.dataChannel.close();
       this.dataChannel = null;
@@ -535,7 +684,6 @@ export class WebRTCService {
 
     signalingService.removeAllListeners();
     
-    // Reset state
     this.currentFiles = [];
     this.receiveBuffers = [];
     this.currentFileIndex = 0;
@@ -543,7 +691,7 @@ export class WebRTCService {
     this.transferStartTime = 0;
     this.receivedBytes = 0;
     this.lastProgressSync = 0;
-    this.cancelledFileIndices.clear(); // Clear cancelled files for new transfer
+    this.cancelledFileIndices.clear();
     this.role = null;
     this.roomCode = '';
   }
