@@ -607,9 +607,6 @@ export default function P2PFileTransfer() {
         <div className="mt-6 w-full max-w-2xl text-center">
           <div className="text-black/80">
             <h3 className="text-lg font-semibold mb-2">TransmitFlow</h3>
-            <p className="text-sm text-black/70 mb-1">
-              Seamless file transmission
-            </p>
             <p className="text-sm text-black/70">
               No servers, no limits, direct device-to-device transfer
             </p>
