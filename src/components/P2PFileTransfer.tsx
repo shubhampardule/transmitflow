@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Wifi, WifiOff, Zap } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Zap, Coffee, Heart, Shield, Cpu, Leaf, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TransferState } from '@/types';
@@ -438,7 +438,7 @@ export default function P2PFileTransfer() {
               TransmitFlow
             </CardTitle>
             <CardDescription className="text-lg text-muted-foreground">
-              Seamless file transmission
+              Send files of any size directly from your device without ever storing anything online.
             </CardDescription>
           </CardHeader>
 
@@ -486,32 +486,120 @@ export default function P2PFileTransfer() {
           </CardContent>
         </Card>
         
+        {/* Feature Highlights Section */}
+        <div className="mt-8 w-full max-w-4xl">
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 border border-white/20">
+              <div className="flex items-center gap-3 mb-3">
+                <Shield className="h-6 w-6 text-blue-400" />
+                <h3 className="font-semibold text-black">Privacy First</h3>
+              </div>
+              <p className="text-black/80 text-sm">
+                We are a free and independent peer-to-peer (P2P) file sharing service that prioritizes your privacy and keeps your data safe. We store nothing online.
+              </p>
+            </div>
+            
+            <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 border border-white/20">
+              <div className="flex items-center gap-3 mb-3">
+                <Cpu className="h-6 w-6 text-purple-400" />
+                <h3 className="font-semibold text-black">No Size Limits</h3>
+              </div>
+              <p className="text-black/80 text-sm">
+                Because we don't store the data, there's no need for file size limits. Just share files of any size or whatever amount.
+              </p>
+            </div>
+            
+            <div className="bg-white/10 backdrop-blur-md rounded-lg p-6 border border-white/20">
+              <div className="flex items-center gap-3 mb-3">
+                <Leaf className="h-6 w-6 text-green-400" />
+                <h3 className="font-semibold text-black">Eco-Friendly</h3>
+              </div>
+              <p className="text-black/80 text-sm">
+                Because we don't store data we don't need bulky servers, and that saves a lot of energy. Much smaller carbon footprint than cloud storage.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* How It Works Section */}
+        <div className="mt-6 w-full max-w-2xl">
+          <Card className="bg-white/10 backdrop-blur-md border-white/20">
+            <CardHeader className="text-center">
+              <CardTitle className="text-xl font-bold text-black">How It Works</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-black/80 text-sm space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold mt-0.5">1</div>
+                  <p><strong>Direct Connection:</strong> TransmitFlow uses peer-to-peer technology WebRTC to find the shortest path, meaning sometimes your data doesn't even have to leave the building!</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs font-bold mt-0.5">2</div>
+                  <p><strong>End-to-End Encryption:</strong> Only you and the receiver can access your files. Your data is encrypted end-to-end, and can only be read by your receiver.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold mt-0.5">3</div>
+                  <p><strong>No Storage:</strong> When you close the browser tab your files are no longer accessible, minimising the risk of anyone getting unwanted access.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Support Section */}
+        <div className="mt-8 w-full max-w-2xl">
+          <Card className="bg-gradient-to-r from-orange-500/10 to-yellow-500/10 backdrop-blur-md border-orange-200/30">
+            <CardHeader className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Coffee className="h-6 w-6 text-orange-600" />
+                <Heart className="h-5 w-5 text-red-500" />
+              </div>
+              <CardTitle className="text-xl font-bold text-black">Support TransmitFlow</CardTitle>
+              <CardDescription className="text-black/70">
+                Help us keep this service free and independent
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center space-y-4">
+              <div className="text-black/80 text-sm space-y-2">
+                <p>
+                  TransmitFlow is completely free to use and always will be. We don't track you, sell your data, or show ads.
+                </p>
+                <p>
+                  If you find our service useful, consider buying us a coffee to help cover our server costs and keep the project running!
+                </p>
+              </div>
+              
+              <div className="flex items-center justify-center gap-2 text-black/70 text-xs">
+                <Users className="h-4 w-4" />
+                <span>We started with just a few users per day, but we now transfer more than 50 terabyte (TB) per month!</span>
+              </div>
+              
+              <a
+                href="https://buymeacoffee.com/10newolf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-yellow-500 text-white px-6 py-3 rounded-lg font-semibold hover:from-orange-600 hover:to-yellow-600 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+              >
+                <Coffee className="h-5 w-5" />
+                Buy us a coffee ☕
+              </a>
+              
+              <p className="text-xs text-black/60 mt-2">
+                Your support helps us maintain this free service for everyone
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+        
         {/* Website Info */}
         <div className="mt-6 w-full max-w-2xl text-center">
           <div className="text-black/80">
-            <h3 className="text-lg font-semibold mb-2">TransmitFlow</h3>
             <p className="text-sm text-black/70 mb-1">
-              Seamless file transmission
+              Our mission is to make sure people keep their data safely into their own hands, as it should be.
             </p>
             <p className="text-sm text-black/70">
               No servers, no limits, direct device-to-device transfer
             </p>
-          </div>
-          {/* ToffeeShare-inspired About Section for TransmitFlow */}
-          <div className="mt-8 text-left bg-white/80 rounded-xl shadow p-6 border border-gray-200">
-            <h2 className="text-2xl font-bold mb-2">What is TransmitFlow?</h2>
-            <p className="mb-3">TransmitFlow is a free and independent peer-to-peer (P2P) file sharing service that prioritizes your privacy and keeps your data safe. We store nothing online: simply close your browser to stop sending.</p>
-            <p className="mb-3">Our mission is to make sure people keep their data safely in their own hands, as it should be.</p>
-            <ul className="list-disc pl-5 space-y-2 mb-4">
-              <li><span className="font-semibold">☁️ Files are shared straight from your device:</span> When you close the browser tab your files are no longer accessible, minimizing the risk of unwanted access.</li>
-              <li><span className="font-semibold">📏 No more file size limits:</span> Because we don't store the data, there's no need for file size limits. Share files of any size or amount. Just keep an eye on your own data usage.</li>
-              <li><span className="font-semibold">🔒 Only the receiver can access your files:</span> Your data is encrypted end-to-end and can only be read by your receiver (and you, of course).</li>
-              <li><span className="font-semibold">🌳 Low environmental impact:</span> No bulky servers means less energy use. By using TransmitFlow, you'll have a much smaller carbon footprint than with cloud storage providers.</li>
-              <li><span className="font-semibold">📊 We keep on growing!</span> We started with just a few users per day, but now transfer terabytes per month!</li>
-            </ul>
-            <p className="mb-2">Do you still have questions? Check out our documentation, or <a href="https://github.com/10neWOlF/transmitflow/issues" className="text-blue-600 hover:underline">contact us</a> for any questions about TransmitFlow or privacy.</p>
-            <p className="mb-2">If you love TransmitFlow, <a href="https://buymeacoffee.com/10newolf" className="text-yellow-700 hover:underline font-semibold">buy me a coffee ☕</a> to support development!</p>
-          </div>
           </div>
         </div>
         
