@@ -515,7 +515,7 @@ export default function P2PFileTransfer() {
                     <h3 className="text-lg font-semibold text-black/90">Absolute Privacy</h3>
                   </div>
                   <p className="text-black/70 text-sm">
-                    Your files never touch our servers. We don't see, store, or track them.
+                    Your files never touch our servers. We don&apos;t see, store, or track them.
                   </p>
                 </div>
 
