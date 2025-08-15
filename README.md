@@ -8,7 +8,7 @@
 ![WebRTC](https://img.shields.io/badge/WebRTC-Enabled-green?style=for-the-badge)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Ready-3178C6?style=for-the-badge&logo=typescript)
 
-**Share files directly between devices without any servers storing your data - Seamless file transmission made simple.**
+**Send files instantly between devices without any servers storing your data - Seamless file transfer made simple.**
 
 [🚀 Live Demo](https://transmitflow.com) • [📖 Documentation](https://github.com/10neWOlF/transmitflow/wiki) • [🐛 Report Bug](https://github.com/10neWOlF/transmitflow/issues) • [✨ Request Feature](https://github.com/10neWOlF/transmitflow/issues)
 
