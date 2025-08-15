@@ -305,7 +305,7 @@ export class WebRTCService {
     this.dataChannel.onclose = () => {
       console.log('Data channel closed');
       this.onDataChannelClose?.();
-      this.onStatusMessage?.('Connection closed.');
+      this.onStatusMessage?.('Connection closed');
     };
 
     this.dataChannel.onerror = (error) => {
