@@ -479,3 +479,26 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+
+// TURN server configuration
+const turnConfig = {
+  iceServers: [
+    // ...existing STUN servers...
+    {
+      urls: "turn:standard.relay.metered.ca:80",
+      username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME,
+      credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL,
+    },
+    {
+      urls: "turn:standard.relay.metered.ca:80",
+      username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME_2,
+      credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL_2,
+    },
+    {
+      urls: "turn:standard.relay.metered.ca:80",
+      username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME_3,
+      credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL_3,
+    },
+    // ...add more as needed...
+  ]
+};
