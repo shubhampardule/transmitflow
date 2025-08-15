@@ -1,3 +1,8 @@
+// Custom interface for candidate stats properties
+interface CandidateStats {
+  candidateType?: string;
+  protocol?: string;
+}
 import { FileMetadata, SignalingMessage, DataChannelMessage, FileTransferProgress } from '@/types';
 import { signalingService } from './signaling';
 
@@ -7,29 +12,44 @@ export class WebRTCService {
   private roomCode: string = '';
   private role: 'sender' | 'receiver' | null = null;
   
-  // AGGRESSIVE optimization - minimal ICE servers
+  // Adaptive connection configuration
   private readonly config: RTCConfiguration = {
     iceServers: [
-      // Only use Google STUN - it's the fastest and most reliable
+      // Multiple STUN servers for better connectivity
       { urls: 'stun:stun.l.google.com:19302' },
-      // Keep one TURN as fallback but don't wait for it
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      
+      // Multiple TURN servers for redundancy
       {
-        urls: "turn:standard.relay.metered.ca:80",
+        urls: ["turn:standard.relay.metered.ca:80", "turn:standard.relay.metered.ca:80?transport=tcp"],
         username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME,
         credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL,
       },
+      {
+        urls: ["turn:relay.metered.ca:80", "turn:relay.metered.ca:80?transport=tcp"],
+        username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME_2,
+        credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL_2,
+      },
+      // Add more TURN servers if available
     ],
     
-    // CRITICAL: These settings speed up connection
+    // Optimized ICE settings for remote connections
     iceTransportPolicy: 'all',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
-    iceCandidatePoolSize: 0, // Don't pre-gather
+    iceCandidatePoolSize: 10, // Pre-gather candidates
   };
 
-  // Aggressive transfer settings for LAN/fast connections
-  private readonly chunkSize = 64 * 1024; // 64KB chunks (original stable setting)
-  private readonly maxBufferSize = 8 * 1024 * 1024; // 8MB max buffer (original stable setting)
+  // Adaptive chunk settings based on connection type
+  private chunkSize = 16 * 1024; // Start with 16KB (safer for relay)
+  private maxChunkSize = 64 * 1024; // Maximum for local connections
+  private minChunkSize = 4 * 1024; // Minimum for poor connections
+  private maxBufferSize = 2 * 1024 * 1024; // Reduced initial buffer
+  private connectionType: 'direct' | 'relay' | 'unknown' = 'unknown';
+  private isSlowConnection = false;
+  private retransmissionCount = 0;
 
   // Event handlers
   public onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
@@ -50,8 +70,8 @@ export class WebRTCService {
   public onFileCancelled?: (data: { fileIndex: number; fileName: string; cancelledBy: 'sender' | 'receiver' }) => void;
   public onError?: (error: string) => void;
   public onIceGatheringStateChange?: (state: RTCIceGatheringState) => void;
-  public onConnectionInfo?: (info: { localType?: string; remoteType?: string; protocol?: string }) => void;
-  public onStatusMessage?: (message: string) => void; // New: For user-friendly status updates
+  public onConnectionInfo?: (info: { localType?: string; remoteType?: string; protocol?: string; connectionType?: string }) => void;
+  public onStatusMessage?: (message: string) => void;
 
   // Transfer state
   private currentFiles: File[] = [];
@@ -66,6 +86,11 @@ export class WebRTCService {
   private hasStartedTransfer = false;
   private offerCreated = false;
   private isConnecting = false;
+  
+  // Performance monitoring
+  private speedHistory: number[] = [];
+  private errorCount = 0;
+  private adaptiveDelayMs = 0;
 
   // Getters
   get currentRole(): 'sender' | 'receiver' | null {
@@ -87,14 +112,11 @@ export class WebRTCService {
     this.hasStartedTransfer = false;
     this.offerCreated = false;
 
-    // User-friendly status update
     this.onStatusMessage?.('Preparing to send files...');
 
-    // Create peer connection and data channel in parallel
     await this.createPeerConnection();
     this.createDataChannel();
     
-    // Create offer IMMEDIATELY - don't wait for anything
     if (!this.offerCreated) {
       this.offerCreated = true;
       const offer = await this.peerConnection!.createOffer({
@@ -104,7 +126,6 @@ export class WebRTCService {
       
       await this.peerConnection!.setLocalDescription(offer);
       
-      // Send offer RIGHT AWAY
       console.log('Sending offer immediately');
       signalingService.sendSignal({
         type: 'offer',
@@ -115,8 +136,8 @@ export class WebRTCService {
       this.onStatusMessage?.('Connecting to receiver...');
     }
 
-    // Very short timeout since we're on fast network
-    this.setConnectionTimeout(10000); // 10 seconds
+    // Longer timeout for remote connections
+    this.setConnectionTimeout(30000); // 30 seconds for remote
     
     console.timeEnd('Sender initialization');
   }
@@ -133,13 +154,12 @@ export class WebRTCService {
     this.roomCode = roomCode;
     this.role = 'receiver';
 
-    // User-friendly status update
     this.onStatusMessage?.('Waiting for sender to connect...');
 
     await this.createPeerConnection();
     this.setupDataChannelReceiver();
     
-    this.setConnectionTimeout(10000);
+    this.setConnectionTimeout(30000);
     
     console.timeEnd('Receiver initialization');
   }
@@ -149,7 +169,6 @@ export class WebRTCService {
     
     this.peerConnection = new RTCPeerConnection(this.config);
 
-    // CRITICAL: Try to start transfer on ANY positive signal
     let transferAttempted = false;
     
     const attemptTransferStart = () => {
@@ -160,14 +179,15 @@ export class WebRTCService {
         
         console.log(`Checking transfer start: DC=${dcState}, ICE=${iceState}, Conn=${connState}`);
         
-        // Start if data channel is open OR ICE is connected
         if (dcState === 'open' || iceState === 'connected' || iceState === 'completed') {
           if (!this.hasStartedTransfer && this.currentFiles.length > 0) {
-            console.log('🚀 Starting transfer IMMEDIATELY!');
-            this.onStatusMessage?.('Connected! Starting file transfer...');
+            console.log('🚀 Starting transfer!');
+            this.onStatusMessage?.('Connected! Analyzing connection quality...');
             this.hasStartedTransfer = true;
             transferAttempted = true;
-            this.startFileTransfer();
+            
+            // Wait a moment to analyze connection before starting
+            setTimeout(() => this.startFileTransfer(), 1000);
           }
         }
       }
@@ -182,47 +202,45 @@ export class WebRTCService {
       if (state === 'connecting') {
         this.onStatusMessage?.('Establishing connection...');
       } else if (state === 'connected') {
-        this.onStatusMessage?.('Connected successfully!');
+        this.onStatusMessage?.('Connected! Optimizing for your network...');
         this.clearConnectionTimeout();
+        this.analyzeConnection();
         attemptTransferStart();
       } else if (state === 'failed') {
-        this.onError?.('Unable to connect. Please check your internet connection and try again.');
+        this.onError?.('Connection failed. This may be due to network restrictions. Please try again.');
       }
     };
 
-    // Monitor ICE connection - THIS IS USUALLY FASTER
     this.peerConnection.oniceconnectionstatechange = () => {
       const state = this.peerConnection!.iceConnectionState;
       console.log(`ICE state: ${state} at ${Date.now()}`);
       
       if (state === 'checking') {
-        this.onStatusMessage?.('Almost connected...');
+        this.onStatusMessage?.('Finding best connection path...');
       } else if (state === 'connected' || state === 'completed') {
         this.clearConnectionTimeout();
+        this.analyzeConnection();
         attemptTransferStart();
       } else if (state === 'failed') {
-        this.onError?.('Connection failed. Please try again.');
+        this.onError?.('Connection failed. Trying different network path...');
+        // Attempt ICE restart
+        this.restartIce();
       } else if (state === 'disconnected') {
-        this.onStatusMessage?.('Connection lost. Trying to reconnect...');
+        this.onStatusMessage?.('Connection lost. Attempting to reconnect...');
       }
     };
 
-    // ICE gathering state
     this.peerConnection.onicegatheringstatechange = () => {
       const state = this.peerConnection!.iceGatheringState;
       console.log(`ICE gathering: ${state} at ${Date.now()}`);
       this.onIceGatheringStateChange?.(state);
     };
 
-    // Send ICE candidates AS SOON AS they're generated
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        // Log only important candidates
-        if (event.candidate.type === 'host' || event.candidate.type === 'srflx') {
-          console.log(`Sending ${event.candidate.type} candidate`);
-        }
+        // Analyze candidate types for connection optimization
+        this.analyzeCandidateType(event.candidate);
         
-        // Send immediately - no buffering
         signalingService.sendSignal({
           type: 'ice',
           payload: event.candidate,
@@ -231,20 +249,118 @@ export class WebRTCService {
       }
     };
 
-    // Set up signaling BEFORE creating connection
     signalingService.onSignal(this.handleSignalingMessage.bind(this));
     
     console.timeEnd('Create peer connection');
   }
 
-  private setConnectionTimeout(duration: number = 10000): void {
+  private analyzeCandidateType(candidate: RTCIceCandidate): void {
+    const candidateString = candidate.candidate;
+    
+    if (candidateString.includes('typ host')) {
+      console.log('✅ Host candidate - potential direct connection');
+    } else if (candidateString.includes('typ srflx')) {
+      console.log('⚡ Server reflexive candidate - NAT traversal');
+    } else if (candidateString.includes('typ relay')) {
+      console.log('🔄 Relay candidate - will use TURN server');
+      this.connectionType = 'relay';
+      this.isSlowConnection = true;
+      // Optimize for relay connection
+      this.optimizeForRelay();
+    }
+  }
+
+  private async analyzeConnection(): Promise<void> {
+    try {
+      const stats = await this.peerConnection!.getStats();
+  let localCandidate: CandidateStats | null = null;
+  let remoteCandidate: CandidateStats | null = null;
+      let candidatePair: RTCIceCandidatePairStats | null = null;
+
+      stats.forEach((report) => {
+        if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+          candidatePair = report as RTCIceCandidatePairStats;
+        } else if (report.type === 'local-candidate' && candidatePair?.localCandidateId === report.id) {
+          localCandidate = report as CandidateStats;
+        } else if (report.type === 'remote-candidate' && candidatePair?.remoteCandidateId === report.id) {
+          remoteCandidate = report as CandidateStats;
+        }
+      });
+
+      if (localCandidate && remoteCandidate) {
+  const localType = localCandidate && 'candidateType' in localCandidate ? (localCandidate as any).candidateType : undefined;
+  const remoteType = remoteCandidate && 'candidateType' in remoteCandidate ? (remoteCandidate as any).candidateType : undefined;
+  const protocol = localCandidate && 'protocol' in localCandidate ? (localCandidate as any).protocol : undefined;
+        
+        console.log(`Connection analysis: Local=${localType}, Remote=${remoteType}, Protocol=${protocol}`);
+        
+        // Determine connection type and optimize accordingly
+        if ((localType === 'host' && remoteType === 'host') || 
+            (localType === 'srflx' && remoteType === 'srflx')) {
+          this.connectionType = 'direct';
+          this.optimizeForDirect();
+          this.onStatusMessage?.('Direct connection established - optimal speed!');
+        } else if (localType === 'relay' || remoteType === 'relay') {
+          this.connectionType = 'relay';
+          this.isSlowConnection = true;
+          this.optimizeForRelay();
+          this.onStatusMessage?.('Using relay connection - optimized for stability');
+        }
+
+        this.onConnectionInfo?.({
+          localType,
+          remoteType,
+          protocol,
+          connectionType: this.connectionType
+        });
+      }
+    } catch (error) {
+      console.warn('Could not analyze connection:', error);
+    }
+  }
+
+  private optimizeForDirect(): void {
+    console.log('🚀 Optimizing for direct connection');
+    this.chunkSize = this.maxChunkSize; // Use large chunks
+    this.maxBufferSize = 8 * 1024 * 1024; // Large buffer
+    this.adaptiveDelayMs = 0; // No delay
+  }
+
+  private optimizeForRelay(): void {
+    console.log('🔄 Optimizing for relay connection');
+    this.chunkSize = this.minChunkSize; // Use small chunks
+    this.maxBufferSize = 512 * 1024; // Small buffer
+    this.adaptiveDelayMs = 10; // Small delay between chunks
+  }
+
+  private async restartIce(): Promise<void> {
+    console.log('🔄 Attempting ICE restart');
+    if (this.peerConnection && this.role === 'sender') {
+      try {
+        const offer = await this.peerConnection.createOffer({ iceRestart: true });
+        await this.peerConnection.setLocalDescription(offer);
+        
+        signalingService.sendSignal({
+          type: 'offer',
+          payload: offer,
+          toRoom: this.roomCode,
+        });
+        
+        this.onStatusMessage?.('Trying different connection method...');
+      } catch (error) {
+        console.error('ICE restart failed:', error);
+      }
+    }
+  }
+
+  private setConnectionTimeout(duration: number = 30000): void {
     this.connectionTimeout = setTimeout(() => {
       const iceState = this.peerConnection?.iceConnectionState;
       const connState = this.peerConnection?.connectionState;
       
       if (iceState !== 'connected' && iceState !== 'completed' && connState !== 'connected') {
         console.error(`Connection timeout - ICE: ${iceState}, Conn: ${connState}`);
-        this.onError?.('Taking too long to connect. Please make sure both devices have internet access and try again.');
+        this.onError?.('Connection is taking longer than expected. This may be due to network restrictions between you and your friend. Please both try connecting to a different WiFi network or using mobile data.');
         this.cleanup();
       }
     }, duration);
@@ -260,14 +376,15 @@ export class WebRTCService {
   private createDataChannel(): void {
     console.time('Create data channel');
     
-    // OPTIMIZED data channel for speed
-    this.dataChannel = this.peerConnection!.createDataChannel('file-transfer', {
+    // Configure data channel based on expected connection type
+    const dataChannelOptions: RTCDataChannelInit = {
       ordered: true,
-      maxRetransmits: 10, // More retransmits for reliability on fast networks
-    });
-
+      maxRetransmits: this.isSlowConnection ? 20 : 3, // More retransmits for slow connections
+    };
+    
+    this.dataChannel = this.peerConnection!.createDataChannel('file-transfer', dataChannelOptions);
     this.dataChannel.binaryType = 'arraybuffer';
-    this.dataChannel.bufferedAmountLowThreshold = this.chunkSize * 10; // Bigger threshold
+    this.dataChannel.bufferedAmountLowThreshold = this.chunkSize * 2;
     
     console.log(`Data channel created with ID: ${this.dataChannel.id}`);
     this.setupDataChannelHandlers();
@@ -280,7 +397,7 @@ export class WebRTCService {
       console.log('Data channel received from sender');
       this.dataChannel = event.channel;
       this.dataChannel.binaryType = 'arraybuffer';
-      this.dataChannel.bufferedAmountLowThreshold = this.chunkSize * 10;
+      this.dataChannel.bufferedAmountLowThreshold = this.chunkSize * 2;
       this.setupDataChannelHandlers();
     };
   }
@@ -291,14 +408,16 @@ export class WebRTCService {
     this.dataChannel.onopen = () => {
       console.log(`📡 Data channel OPEN at ${Date.now()}`);
       this.onDataChannelOpen?.();
-      this.onStatusMessage?.('Ready to transfer files!');
       
-      // IMMEDIATELY start transfer if sender
       if (this.role === 'sender' && !this.hasStartedTransfer && this.currentFiles.length > 0) {
         console.log('🚀 Starting transfer on DC open!');
-        this.onStatusMessage?.('Starting file transfer...');
         this.hasStartedTransfer = true;
-        this.startFileTransfer();
+        
+        // Brief delay to let connection stabilize
+        setTimeout(() => {
+          this.onStatusMessage?.('Starting optimized file transfer...');
+          this.startFileTransfer();
+        }, 500);
       }
     };
 
@@ -310,7 +429,10 @@ export class WebRTCService {
 
     this.dataChannel.onerror = (error) => {
       console.error('Data channel error:', error);
-      this.onError?.('Connection error occurred. Please try again.');
+      this.errorCount++;
+      if (this.errorCount > 5) {
+        this.onError?.('Too many connection errors. Please try again with a more stable internet connection.');
+      }
     };
 
     this.dataChannel.onmessage = (event) => {
@@ -330,12 +452,10 @@ export class WebRTCService {
         case 'offer':
           if (this.role === 'receiver') {
             console.time('Process offer and send answer');
-            this.onStatusMessage?.('Sender found! Connecting...');
+            this.onStatusMessage?.('Sender found! Establishing secure connection...');
             
-            // Set remote description
             await this.peerConnection!.setRemoteDescription(message.payload);
             
-            // Create and send answer IMMEDIATELY
             const answer = await this.peerConnection!.createAnswer();
             await this.peerConnection!.setLocalDescription(answer);
             
@@ -359,11 +479,11 @@ export class WebRTCService {
           break;
 
         case 'ice':
-          // Add ICE candidate without waiting
-          this.peerConnection!.addIceCandidate(message.payload).catch(e => {
-            // Ignore failures - some candidates might not work
-            console.debug('ICE candidate failed (normal):', e.message);
-          });
+          try {
+            await this.peerConnection!.addIceCandidate(message.payload);
+          } catch (e) {
+            console.debug('ICE candidate failed (normal):', e);
+          }
           break;
       }
     } catch (error) {
@@ -373,29 +493,28 @@ export class WebRTCService {
   }
 
   private async startFileTransfer(): Promise<void> {
-    console.log(`📤 Starting file transfer with ${this.currentFiles.length} files`);
+    console.log(`📤 Starting optimized file transfer with ${this.currentFiles.length} files`);
+    console.log(`📊 Connection type: ${this.connectionType}, Chunk size: ${this.chunkSize / 1024}KB`);
     
     if (this.currentFiles.length === 0 || !this.dataChannel) return;
 
-    this.onStatusMessage?.('Preparing files for transfer...');
+    // Final connection analysis before starting
+    await this.analyzeConnection();
 
-    // Wait a tiny bit for channel to stabilize if needed
     if (this.dataChannel.readyState !== 'open') {
       console.log('Waiting for data channel to open...');
-      this.onStatusMessage?.('Getting ready...');
       await new Promise(resolve => {
         const checkOpen = setInterval(() => {
           if (this.dataChannel?.readyState === 'open') {
             clearInterval(checkOpen);
             resolve(undefined);
           }
-        }, 50);
+        }, 100);
         
-        // Timeout after 2 seconds
         setTimeout(() => {
           clearInterval(checkOpen);
           resolve(undefined);
-        }, 2000);
+        }, 5000);
       });
     }
 
@@ -421,7 +540,7 @@ export class WebRTCService {
     this.transferStartTime = Date.now();
     this.currentFileIndex = 0;
     
-    // Start sending first file
+    this.onStatusMessage?.(`Starting transfer with ${this.connectionType} connection...`);
     await this.sendFile(this.currentFiles[0]);
   }
 
@@ -457,10 +576,12 @@ export class WebRTCService {
     const arrayBuffer = await file.arrayBuffer();
     const totalChunks = Math.ceil(arrayBuffer.byteLength / this.chunkSize);
     
-    console.log(`Sending ${totalChunks} chunks of ${this.chunkSize / 1024}KB each`);
+    console.log(`Sending ${totalChunks} chunks of ${this.chunkSize / 1024}KB each (${this.connectionType} connection)`);
     
-    // Send chunks FAST
     let sentBytes = 0;
+    let lastSpeedCheck = Date.now();
+    let bytesAtLastCheck = 0;
+    
     for (let i = 0; i < totalChunks; i++) {
       if (this.cancelledFileIndices.has(this.currentFileIndex)) {
         return;
@@ -470,29 +591,64 @@ export class WebRTCService {
       const end = Math.min(start + this.chunkSize, arrayBuffer.byteLength);
       const chunk = arrayBuffer.slice(start, end);
       
-      // Only wait if buffer is REALLY full
-      if (this.dataChannel!.bufferedAmount > this.maxBufferSize) {
+      // Adaptive buffer management
+      const bufferThreshold = this.isSlowConnection ? this.maxBufferSize / 4 : this.maxBufferSize;
+      
+      if (this.dataChannel!.bufferedAmount > bufferThreshold) {
         await new Promise(resolve => {
           const checkBuffer = setInterval(() => {
-            if (this.dataChannel!.bufferedAmount < this.maxBufferSize / 2) {
+            if (this.dataChannel!.bufferedAmount < bufferThreshold / 2) {
               clearInterval(checkBuffer);
               resolve(undefined);
             }
-          }, 1);
+          }, 10);
         });
       }
       
       try {
         this.dataChannel!.send(chunk);
         sentBytes += chunk.byteLength;
+        
+        // Add adaptive delay for slow connections
+        if (this.adaptiveDelayMs > 0) {
+          await new Promise(resolve => setTimeout(resolve, this.adaptiveDelayMs));
+        }
+        
       } catch (error) {
         console.error(`Error sending chunk ${i + 1}:`, error);
-        this.onError?.('File transfer was interrupted. Please try sending again.');
-        return;
+        this.retransmissionCount++;
+        
+        if (this.retransmissionCount > 10) {
+          this.onError?.('Too many transmission errors. Connection may be unstable.');
+          return;
+        }
+        
+        // Retry the chunk
+        i--; // Retry current chunk
+        continue;
       }
       
-      // Report progress every 50 chunks or at the end
-      if (i % 50 === 0 || i === totalChunks - 1) {
+      // Monitor speed and adapt
+      const now = Date.now();
+      if (now - lastSpeedCheck > 2000) { // Check every 2 seconds
+        const speed = (sentBytes - bytesAtLastCheck) / ((now - lastSpeedCheck) / 1000);
+        this.speedHistory.push(speed);
+        
+        // Keep last 5 speed readings
+        if (this.speedHistory.length > 5) {
+          this.speedHistory.shift();
+        }
+        
+        // Adapt chunk size based on performance
+  this.adaptChunkSize();
+        
+        lastSpeedCheck = now;
+        bytesAtLastCheck = sentBytes;
+      }
+      
+      // Report progress less frequently for slow connections
+      const progressInterval = this.isSlowConnection ? 25 : 10;
+      if (i % progressInterval === 0 || i === totalChunks - 1) {
         const progress = ((i + 1) / totalChunks) * 100;
         const speed = this.calculateSpeed(sentBytes);
         
@@ -507,9 +663,10 @@ export class WebRTCService {
         
         this.onTransferProgress?.(progressData);
         
-        // Sync less frequently
+        // Sync progress less frequently for slow connections
+        const syncInterval = this.isSlowConnection ? 5000 : 1000;
         const now = Date.now();
-        if (now - this.lastProgressSync > 1000 || progress >= 100) {
+        if (now - this.lastProgressSync > syncInterval || progress >= 100) {
           this.sendTextMessage({
             type: 'progress-sync',
             data: progressData
@@ -521,7 +678,6 @@ export class WebRTCService {
 
     console.log(`✅ File sent: ${file.name}`);
 
-    // Move to next file
     this.currentFileIndex++;
     if (this.currentFileIndex < this.currentFiles.length) {
       await this.sendFile(this.currentFiles[this.currentFileIndex]);
@@ -529,6 +685,24 @@ export class WebRTCService {
       this.sendTextMessage({ type: 'transfer-complete' });
       this.onStatusMessage?.('All files sent successfully!');
       this.onTransferComplete?.();
+    }
+  }
+
+  private adaptChunkSize(): void {
+    // Don't adapt if we don't have enough data
+    if (this.speedHistory.length < 3) return;
+    const avgSpeed = this.speedHistory.reduce((a, b) => a + b, 0) / this.speedHistory.length;
+    // If speed is consistently low (< 50KB/s), reduce chunk size
+    if (avgSpeed < 50 * 1024 && this.chunkSize > this.minChunkSize) {
+      this.chunkSize = Math.max(this.minChunkSize, this.chunkSize * 0.8);
+      this.adaptiveDelayMs = Math.min(50, this.adaptiveDelayMs + 5);
+      console.log(`📉 Reduced chunk size to ${this.chunkSize / 1024}KB due to slow speed`);
+    }
+    // If speed is good (> 200KB/s) and we're using small chunks, increase
+    else if (avgSpeed > 200 * 1024 && this.chunkSize < this.maxChunkSize && this.connectionType === 'direct') {
+      this.chunkSize = Math.min(this.maxChunkSize, this.chunkSize * 1.2);
+      this.adaptiveDelayMs = Math.max(0, this.adaptiveDelayMs - 5);
+      console.log(`� Increased chunk size to ${this.chunkSize / 1024}KB due to good speed`);
     }
   }
 
@@ -591,6 +765,19 @@ export class WebRTCService {
     this.receiveBuffers.push(data);
     this.receivedBytes += data.byteLength;
 
+    // Report progress for receiver
+    const progress = (this.receivedBytes / this.currentFileMeta.size) * 100;
+    const speed = this.calculateSpeed(this.receivedBytes);
+    
+    this.onTransferProgress?.({
+      fileName: this.currentFileMeta.name,
+      fileIndex: this.currentFileIndex,
+      progress,
+      bytesTransferred: this.receivedBytes,
+      totalBytes: this.currentFileMeta.size,
+      speed,
+    });
+
     if (this.receivedBytes >= this.currentFileMeta.size) {
       const blob = new Blob(this.receiveBuffers, { type: this.currentFileMeta.type });
       const file = new File([blob], this.currentFileMeta.name, {
@@ -623,6 +810,40 @@ export class WebRTCService {
     const speed = elapsed > 0 ? bytesTransferred / elapsed : 0;
     
     return isFinite(speed) ? Math.max(0, speed) : 0;
+  }
+
+  // Get connection quality info for debugging
+  async getConnectionStats(): Promise<Record<string, unknown> | null> {
+    if (!this.peerConnection) return null;
+    
+    try {
+      const stats = await this.peerConnection.getStats();
+  const result: Record<string, unknown> = {
+        connectionType: this.connectionType,
+        chunkSize: this.chunkSize,
+        isSlowConnection: this.isSlowConnection,
+        speedHistory: [...this.speedHistory],
+        errorCount: this.errorCount,
+        retransmissionCount: this.retransmissionCount
+      };
+      
+      stats.forEach((report) => {
+        if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+          result.candidatePair = {
+            availableOutgoingBitrate: report.availableOutgoingBitrate,
+            currentRoundTripTime: report.currentRoundTripTime,
+            totalRoundTripTime: report.totalRoundTripTime,
+            bytesReceived: report.bytesReceived,
+            bytesSent: report.bytesSent
+          };
+        }
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Failed to get connection stats:', error);
+      return null;
+    }
   }
 
   cancelTransfer(): void {
@@ -669,6 +890,7 @@ export class WebRTCService {
 
     signalingService.removeAllListeners();
     
+    // Reset all state
     this.currentFiles = [];
     this.receiveBuffers = [];
     this.currentFileIndex = 0;
@@ -682,6 +904,15 @@ export class WebRTCService {
     this.hasStartedTransfer = false;
     this.offerCreated = false;
     this.isConnecting = false;
+    
+    // Reset performance tracking
+    this.speedHistory = [];
+    this.errorCount = 0;
+    this.retransmissionCount = 0;
+    this.connectionType = 'unknown';
+    this.isSlowConnection = false;
+    this.adaptiveDelayMs = 0;
+    this.chunkSize = 16 * 1024; // Reset to conservative default
     
     this.onStatusMessage?.('Disconnected');
   }
