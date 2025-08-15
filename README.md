@@ -188,7 +188,7 @@ graph LR
 </td>
 <td width="20%" align="center">
 
-**2️⃣ Generate Code**
+**2️⃣ Generate QR Code**
 <br/>
 🔗 Create unique room & QR code
 
