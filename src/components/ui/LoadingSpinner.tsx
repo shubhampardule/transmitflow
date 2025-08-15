@@ -1,8 +1,22 @@
 import React from "react";
 
-export default function LoadingSpinner({ size = 48 }: { size?: number }) {
+export default function LoadingSpinner({ size = 40 }: { size?: number }) {
   return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 1000,
+        background: "rgba(255,255,255,0.0)",
+        pointerEvents: "none"
+      }}
+    >
       <svg
         width={size}
         height={size}
@@ -17,8 +31,7 @@ export default function LoadingSpinner({ size = 48 }: { size?: number }) {
           stroke="#3b82f6"
           strokeWidth="5"
           strokeDasharray="31.4 31.4"
-        >
-        </circle>
+        />
         <style>{`
           @keyframes spin {
             100% { transform: rotate(360deg); }
