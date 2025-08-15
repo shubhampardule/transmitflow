@@ -51,6 +51,7 @@ export class WebRTCService {
   public onError?: (error: string) => void;
   public onIceGatheringStateChange?: (state: RTCIceGatheringState) => void;
   public onConnectionInfo?: (info: { localType?: string; remoteType?: string; protocol?: string }) => void;
+  public onStatusMessage?: (message: string) => void; // New: For user-friendly status updates
 
   // Transfer state
   private currentFiles: File[] = [];
@@ -86,6 +87,9 @@ export class WebRTCService {
     this.hasStartedTransfer = false;
     this.offerCreated = false;
 
+    // User-friendly status update
+    this.onStatusMessage?.('Preparing to send files...');
+
     // Create peer connection and data channel in parallel
     await this.createPeerConnection();
     this.createDataChannel();
@@ -107,6 +111,8 @@ export class WebRTCService {
         payload: offer,
         toRoom: roomCode,
       });
+
+      this.onStatusMessage?.('Connecting to receiver...');
     }
 
     // Very short timeout since we're on fast network
@@ -126,6 +132,9 @@ export class WebRTCService {
     this.isConnecting = true;
     this.roomCode = roomCode;
     this.role = 'receiver';
+
+    // User-friendly status update
+    this.onStatusMessage?.('Waiting for sender to connect...');
 
     await this.createPeerConnection();
     this.setupDataChannelReceiver();
@@ -155,6 +164,7 @@ export class WebRTCService {
         if (dcState === 'open' || iceState === 'connected' || iceState === 'completed') {
           if (!this.hasStartedTransfer && this.currentFiles.length > 0) {
             console.log('🚀 Starting transfer IMMEDIATELY!');
+            this.onStatusMessage?.('Connected! Starting file transfer...');
             this.hasStartedTransfer = true;
             transferAttempted = true;
             this.startFileTransfer();
@@ -169,11 +179,14 @@ export class WebRTCService {
       console.log(`Connection state: ${state} at ${Date.now()}`);
       this.onConnectionStateChange?.(state);
       
-      if (state === 'connected') {
+      if (state === 'connecting') {
+        this.onStatusMessage?.('Establishing connection...');
+      } else if (state === 'connected') {
+        this.onStatusMessage?.('Connected successfully!');
         this.clearConnectionTimeout();
         attemptTransferStart();
       } else if (state === 'failed') {
-        this.onError?.('Connection failed');
+        this.onError?.('Unable to connect. Please check your internet connection and try again.');
       }
     };
 
@@ -182,12 +195,15 @@ export class WebRTCService {
       const state = this.peerConnection!.iceConnectionState;
       console.log(`ICE state: ${state} at ${Date.now()}`);
       
-      // Start transfer on ICE connected - don't wait for full connection
-      if (state === 'connected' || state === 'completed') {
+      if (state === 'checking') {
+        this.onStatusMessage?.('Almost connected...');
+      } else if (state === 'connected' || state === 'completed') {
         this.clearConnectionTimeout();
         attemptTransferStart();
-      } else if (state === 'checking') {
-        console.log('ICE checking - connection imminent...');
+      } else if (state === 'failed') {
+        this.onError?.('Connection failed. Please try again.');
+      } else if (state === 'disconnected') {
+        this.onStatusMessage?.('Connection lost. Trying to reconnect...');
       }
     };
 
@@ -228,7 +244,7 @@ export class WebRTCService {
       
       if (iceState !== 'connected' && iceState !== 'completed' && connState !== 'connected') {
         console.error(`Connection timeout - ICE: ${iceState}, Conn: ${connState}`);
-        this.onError?.('Connection timeout. Please try again.');
+        this.onError?.('Taking too long to connect. Please make sure both devices have internet access and try again.');
         this.cleanup();
       }
     }, duration);
@@ -275,10 +291,12 @@ export class WebRTCService {
     this.dataChannel.onopen = () => {
       console.log(`📡 Data channel OPEN at ${Date.now()}`);
       this.onDataChannelOpen?.();
+      this.onStatusMessage?.('Ready to transfer files!');
       
       // IMMEDIATELY start transfer if sender
       if (this.role === 'sender' && !this.hasStartedTransfer && this.currentFiles.length > 0) {
         console.log('🚀 Starting transfer on DC open!');
+        this.onStatusMessage?.('Starting file transfer...');
         this.hasStartedTransfer = true;
         this.startFileTransfer();
       }
@@ -287,11 +305,12 @@ export class WebRTCService {
     this.dataChannel.onclose = () => {
       console.log('Data channel closed');
       this.onDataChannelClose?.();
+      this.onStatusMessage?.('Connection closed');
     };
 
     this.dataChannel.onerror = (error) => {
       console.error('Data channel error:', error);
-      this.onError?.('Data channel error');
+      this.onError?.('Connection error occurred. Please try again.');
     };
 
     this.dataChannel.onmessage = (event) => {
@@ -311,6 +330,7 @@ export class WebRTCService {
         case 'offer':
           if (this.role === 'receiver') {
             console.time('Process offer and send answer');
+            this.onStatusMessage?.('Sender found! Connecting...');
             
             // Set remote description
             await this.peerConnection!.setRemoteDescription(message.payload);
@@ -332,6 +352,7 @@ export class WebRTCService {
         case 'answer':
           if (this.role === 'sender') {
             console.time('Process answer');
+            this.onStatusMessage?.('Receiver responded! Finalizing connection...');
             await this.peerConnection!.setRemoteDescription(message.payload);
             console.timeEnd('Process answer');
           }
@@ -347,6 +368,7 @@ export class WebRTCService {
       }
     } catch (error) {
       console.error('Signaling error:', error);
+      this.onError?.('Connection setup failed. Please try again.');
     }
   }
 
@@ -355,9 +377,12 @@ export class WebRTCService {
     
     if (this.currentFiles.length === 0 || !this.dataChannel) return;
 
+    this.onStatusMessage?.('Preparing files for transfer...');
+
     // Wait a tiny bit for channel to stabilize if needed
     if (this.dataChannel.readyState !== 'open') {
       console.log('Waiting for data channel to open...');
+      this.onStatusMessage?.('Getting ready...');
       await new Promise(resolve => {
         const checkOpen = setInterval(() => {
           if (this.dataChannel?.readyState === 'open') {
@@ -376,6 +401,7 @@ export class WebRTCService {
 
     if (this.dataChannel.readyState !== 'open') {
       console.error('Data channel failed to open');
+      this.onError?.('Unable to start transfer. Please try again.');
       return;
     }
 
@@ -406,12 +432,14 @@ export class WebRTCService {
         await this.sendFile(this.currentFiles[this.currentFileIndex]);
       } else {
         this.sendTextMessage({ type: 'transfer-complete' });
+        this.onStatusMessage?.('All files sent successfully!');
         this.onTransferComplete?.();
       }
       return;
     }
     
     console.log(`Sending file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    this.onStatusMessage?.(`Sending ${file.name}...`);
     
     const metadata: FileMetadata = {
       name: file.name,
@@ -459,7 +487,7 @@ export class WebRTCService {
         sentBytes += chunk.byteLength;
       } catch (error) {
         console.error(`Error sending chunk ${i + 1}:`, error);
-        this.onError?.('Failed to send file chunk');
+        this.onError?.('File transfer was interrupted. Please try sending again.');
         return;
       }
       
@@ -499,6 +527,7 @@ export class WebRTCService {
       await this.sendFile(this.currentFiles[this.currentFileIndex]);
     } else {
       this.sendTextMessage({ type: 'transfer-complete' });
+      this.onStatusMessage?.('All files sent successfully!');
       this.onTransferComplete?.();
     }
   }
@@ -507,6 +536,7 @@ export class WebRTCService {
     switch (message.type) {
       case 'file-list':
         const fileList = message.data as FileMetadata[];
+        this.onStatusMessage?.('Ready to receive files!');
         this.onIncomingFiles?.(fileList);
         break;
 
@@ -516,17 +546,21 @@ export class WebRTCService {
         this.receiveBuffers = [];
         this.receivedBytes = 0;
         
+        this.onStatusMessage?.(`Receiving ${this.currentFileMeta.name}...`);
+        
         if (this.transferStartTime === 0) {
           this.transferStartTime = Date.now();
         }
         break;
 
       case 'transfer-complete':
+        this.onStatusMessage?.('All files received successfully!');
         this.onTransferComplete?.();
         break;
 
       case 'transfer-cancelled':
         const cancelData = message.data as { cancelledBy: 'sender' | 'receiver' };
+        this.onStatusMessage?.('Transfer was cancelled.');
         this.onTransferCancelled?.(cancelData?.cancelledBy || 'peer');
         break;
 
@@ -540,6 +574,7 @@ export class WebRTCService {
           this.receivedBytes = 0;
         }
         
+        this.onStatusMessage?.(`${fileCancelData.fileName} was skipped.`);
         this.onFileCancelled?.(fileCancelData);
         break;
 
@@ -567,6 +602,8 @@ export class WebRTCService {
         this.onFileReceived(file);
       }
       
+      console.log(`✅ File received: ${this.currentFileMeta.name}`);
+      
       this.currentFileMeta = null;
       this.receiveBuffers = [];
       this.receivedBytes = 0;
@@ -589,6 +626,8 @@ export class WebRTCService {
   }
 
   cancelTransfer(): void {
+    this.onStatusMessage?.('Cancelling transfer...');
+    
     if (this.role) {
       this.sendTextMessage({
         type: 'transfer-cancelled',
@@ -601,6 +640,7 @@ export class WebRTCService {
 
   cancelFile(fileIndex: number, fileName: string): void {
     this.cancelledFileIndices.add(fileIndex);
+    this.onStatusMessage?.(`Skipping ${fileName}...`);
     
     if (this.role) {
       this.sendTextMessage({
@@ -642,6 +682,8 @@ export class WebRTCService {
     this.hasStartedTransfer = false;
     this.offerCreated = false;
     this.isConnecting = false;
+    
+    this.onStatusMessage?.('Disconnected');
   }
 }
 
