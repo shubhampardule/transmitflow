@@ -1,5 +1,5 @@
 // Custom interface for candidate stats properties
-interface CandidateStats {
+interface CandidateStat {
   candidateType?: string;
   protocol?: string;
 }
@@ -273,24 +273,24 @@ export class WebRTCService {
   private async analyzeConnection(): Promise<void> {
     try {
       const stats = await this.peerConnection!.getStats();
-  let localCandidate: CandidateStats | null = null;
-  let remoteCandidate: CandidateStats | null = null;
+  let localCandidate: CandidateStat | null = null;
+  let remoteCandidate: CandidateStat | null = null;
       let candidatePair: RTCIceCandidatePairStats | null = null;
 
       stats.forEach((report) => {
         if (report.type === 'candidate-pair' && report.state === 'succeeded') {
           candidatePair = report as RTCIceCandidatePairStats;
         } else if (report.type === 'local-candidate' && candidatePair?.localCandidateId === report.id) {
-          localCandidate = report as CandidateStats;
+          localCandidate = report as CandidateStat;
         } else if (report.type === 'remote-candidate' && candidatePair?.remoteCandidateId === report.id) {
-          remoteCandidate = report as CandidateStats;
+          remoteCandidate = report as CandidateStat;
         }
       });
 
       if (localCandidate && remoteCandidate) {
-  const localType = localCandidate && 'candidateType' in localCandidate ? (localCandidate as any).candidateType : undefined;
-  const remoteType = remoteCandidate && 'candidateType' in remoteCandidate ? (remoteCandidate as any).candidateType : undefined;
-  const protocol = localCandidate && 'protocol' in localCandidate ? (localCandidate as any).protocol : undefined;
+  const localType = (localCandidate as CandidateStat)?.candidateType;
+  const remoteType = (remoteCandidate as CandidateStat)?.candidateType;
+  const protocol = (localCandidate as CandidateStat)?.protocol;
         
         console.log(`Connection analysis: Local=${localType}, Remote=${remoteType}, Protocol=${protocol}`);
         
