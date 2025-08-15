@@ -12,6 +12,7 @@
 
 [🚀 Live Demo](https://transmitflow.com) • [📖 Documentation](https://github.com/10neWOlF/transmitflow/wiki) • [🐛 Report Bug](https://github.com/10neWOlF/transmitflow/issues) • [✨ Request Feature](https://github.com/10neWOlF/transmitflow/issues)
 
+> **Deployed on Vercel for fast, global delivery.**
 </div>
 
 ---
@@ -61,7 +62,7 @@
 
 <div align="center">
 
-![Feature Demo](https://via.placeholder.com/800x400/0066cc/ffffff?text=🚀+P2P+File+Transfer+Demo)
+![Feature Demo: P2P File Transfer in Action](https://via.placeholder.com/800x400/0066cc/ffffff?text=🚀+P2P+File+Transfer+Demo)
 
 *Share files instantly with just a QR code scan!*
 
