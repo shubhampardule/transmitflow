@@ -1,4 +1,4 @@
-# � TransmitFlow
+# <img src="public/file.svg" alt="TransmitFlow Logo" width="32" height="32" style="vertical-align:middle;"> TransmitFlow
 
 <div align="center">
 
