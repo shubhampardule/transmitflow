@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Upload, FileText, Trash2, QrCode } from 'lucide-react';
+
 import QRCode from 'qrcode';
 
 import { formatFileSize } from '@/lib/file-utils';
@@ -218,6 +219,10 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
             <p className="text-lg font-medium">Choose files to share</p>
             <p className="text-sm text-muted-foreground">
               Drop files here or click to browse
+              <br />
+              <span className="flex items-center gap-1 text-xs text-yellow-700 dark:text-yellow-400 mt-1">
+                    Large files may crash or fail to download, especially on mobile.
+              </span>
             </p>
           </div>
         </div>

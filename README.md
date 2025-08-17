@@ -9,6 +9,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-Ready-3178C6?style=for-the-badge&logo=typescript)
 
 **Send files instantly between devices without any servers storing your data - Seamless file transfer made simple.**
+> **⚠️ Note:** Large file transfers (e.g., 1GB+) may use significant memory on your device. On mobile or low-RAM devices, very large transfers can cause performance issues or browser crashes. For best results, use chunked transfers and avoid sending extremely large files on mobile.
 
 [🚀 Live Demo](https://transmitflow.com) • [📖 Documentation](https://github.com/10neWOlF/transmitflow/wiki) • [🐛 Report Bug](https://github.com/10neWOlF/transmitflow/issues) • [✨ Request Feature](https://github.com/10neWOlF/transmitflow/issues)
 
