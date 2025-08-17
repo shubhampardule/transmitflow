@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/10neWOlF/transmitflow/main/public/file.svg" alt="TransmitFlow Logo" width="32" height="32" style="vertical-align:middle;"> TransmitFlow
+# <img src="https://raw.githubusercontent.com/10neWOlF/transmitflow/main/src/app/icon-192.svg" alt="TransmitFlow Logo" width="32" height="32" style="vertical-align:middle;"> TransmitFlow
 
 <div align="center">
 
