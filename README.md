@@ -119,7 +119,10 @@ cd transmitflow
 # 2️⃣ Install dependencies
 npm install
 
-# 3️⃣ Start development server
+# 3️⃣ Open a new terminal and run backend server
+node server.js
+
+# 4️⃣ In the first terminal, start development server
 npm run dev
 
 # 🎉 Open http://localhost:3000 and start sharing!
