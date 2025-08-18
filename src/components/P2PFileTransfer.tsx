@@ -596,7 +596,7 @@ export default function P2PFileTransfer() {
                   className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200"
                 >
                   <Coffee className="h-5 w-5" />
-                  Buy me a coffee ☕
+                  Buy me a coffee
                 </a>
               </div>
             </div>
