@@ -63,7 +63,7 @@
 
 <div align="center">
 
-![Feature Demo: P2P File Transfer in Action](https://via.placeholder.com/800x400/0066cc/ffffff?text=🚀+P2P+File+Transfer+Demo)
+![Feature Demo: P2P File Transfer in Action]<img width="1920" height="1440" alt="365shots_so" src="https://github.com/user-attachments/assets/885ab181-ab60-466f-831b-84614ea4b15d" />
 
 *Share files instantly with just a QR code scan!*
 
