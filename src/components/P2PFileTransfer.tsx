@@ -583,7 +583,9 @@ export default function P2PFileTransfer() {
               {/* Support Section */}
               <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-6 border border-white/50 text-center">
                 <div className="flex items-center justify-center gap-2 mb-3">
-                  <Coffee className="h-6 w-6 text-orange-600" />
+                  <div className="p-2 rounded-lg bg-orange-100">
+                    <Users className="h-6 w-6 text-orange-600" />
+                  </div>
                   <h3 className="text-xl font-semibold text-black/90">Support Our Work</h3>
                 </div>
                 <p className="text-black/70 mb-4">
