@@ -720,6 +720,13 @@ export class WebRTCService {
         this.receiveBuffers = [];
         this.receivedBytes = 0;
         
+        console.log(`📝 File metadata received:`, {
+          name: this.currentFileMeta.name,
+          size: this.currentFileMeta.size,
+          type: this.currentFileMeta.type,
+          fileIndex: this.currentFileMeta.fileIndex
+        });
+        
         this.onStatusMessage?.(`Receiving ${this.currentFileMeta.name}...`);
         
         if (this.transferStartTime === 0) {
@@ -760,10 +767,32 @@ export class WebRTCService {
   }
 
   private handleBinaryData(data: ArrayBuffer): void {
-    if (!this.currentFileMeta) return;
+    if (!this.currentFileMeta) {
+      console.warn('⚠️ Received binary data but no file metadata available');
+      return;
+    }
 
-    this.receiveBuffers.push(data);
-    this.receivedBytes += data.byteLength;
+    console.log(`📦 Received chunk: ${data.byteLength} bytes (Total: ${this.receivedBytes + data.byteLength}/${this.currentFileMeta.size})`);
+    
+    // Validate chunk size
+    if (data.byteLength === 0) {
+      console.warn('⚠️ Received empty chunk, skipping');
+      return;
+    }
+    
+    // Check if adding this chunk would exceed expected file size
+    if (this.receivedBytes + data.byteLength > this.currentFileMeta.size) {
+      console.warn(`⚠️ Chunk would exceed file size. Truncating chunk.`);
+      const allowedBytes = this.currentFileMeta.size - this.receivedBytes;
+      if (allowedBytes > 0) {
+        const truncatedChunk = data.slice(0, allowedBytes);
+        this.receiveBuffers.push(truncatedChunk);
+        this.receivedBytes += truncatedChunk.byteLength;
+      }
+    } else {
+      this.receiveBuffers.push(data);
+      this.receivedBytes += data.byteLength;
+    }
 
     // Report progress for receiver
     const progress = (this.receivedBytes / this.currentFileMeta.size) * 100;
@@ -779,17 +808,41 @@ export class WebRTCService {
     });
 
     if (this.receivedBytes >= this.currentFileMeta.size) {
-      const blob = new Blob(this.receiveBuffers, { type: this.currentFileMeta.type });
-      const file = new File([blob], this.currentFileMeta.name, {
-        type: this.currentFileMeta.type,
-        lastModified: this.currentFileMeta.lastModified,
-      });
-
-      if (this.onFileReceived) {
-        this.onFileReceived(file);
-      }
+      console.log(`📦 Reconstructing file: ${this.currentFileMeta.name}`);
+      console.log(`📊 Total chunks received: ${this.receiveBuffers.length}`);
+      console.log(`📊 Total bytes received: ${this.receivedBytes}`);
+      console.log(`📊 Expected file size: ${this.currentFileMeta.size}`);
       
-      console.log(`✅ File received: ${this.currentFileMeta.name}`);
+      try {
+        // Create blob from all received chunks
+        const blob = new Blob(this.receiveBuffers, { type: this.currentFileMeta.type });
+        console.log(`📊 Blob size after reconstruction: ${blob.size}`);
+        
+        // Verify blob size matches expected size
+        if (blob.size !== this.currentFileMeta.size) {
+          console.error(`❌ File size mismatch! Expected: ${this.currentFileMeta.size}, Got: ${blob.size}`);
+          this.onError?.(`File reconstruction failed: size mismatch for ${this.currentFileMeta.name}`);
+          return;
+        }
+        
+        const file = new File([blob], this.currentFileMeta.name, {
+          type: this.currentFileMeta.type,
+          lastModified: this.currentFileMeta.lastModified,
+        });
+        
+        console.log(`📊 Final file size: ${file.size}`);
+        
+        if (this.onFileReceived) {
+          this.onFileReceived(file);
+        }
+        
+        console.log(`✅ File received successfully: ${this.currentFileMeta.name}`);
+        
+      } catch (error) {
+        console.error(`❌ Error reconstructing file ${this.currentFileMeta.name}:`, error);
+        this.onError?.(`Failed to reconstruct file: ${this.currentFileMeta.name}`);
+        return;
+      }
       
       this.currentFileMeta = null;
       this.receiveBuffers = [];
