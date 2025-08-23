@@ -69,6 +69,11 @@ export default function P2PFileTransfer() {
 
   // Auto-switch to receive tab when QR code URL is detected (client-side only)
   useEffect(() => {
+    // Ensure page always starts at the top
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+    }
+    
     console.log('=== useEffect running ===');
     console.log('typeof window:', typeof window);
     console.log('window.location:', typeof window !== 'undefined' ? window.location : 'undefined');
@@ -450,7 +455,7 @@ export default function P2PFileTransfer() {
       </div>
       
       {/* Your Content/Components */}
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6 transition-all duration-500 ease-in-out">
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-start md:justify-center p-6 pt-8 md:pt-6 transition-all duration-500 ease-in-out">
         <Card className="w-full max-w-2xl bg-background/80 backdrop-blur-xl border-white/20 shadow-2xl dark:bg-gray-800/80 dark:border-gray-700/50 transition-all duration-500 ease-in-out relative">
           {/* Theme Toggle - Mobile only, inside card */}
           <div className="absolute top-4 right-4 z-30 md:hidden">
