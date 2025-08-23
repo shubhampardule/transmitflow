@@ -35,10 +35,10 @@ class SignalingService {
           // Use your deployed signaling server URL
           this.serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'https://signaling-server-6ziv.onrender.com';
         } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
-          this.serverUrl = 'http://localhost:3003';
+          this.serverUrl = 'http://localhost:3001';
         } else {
           // Use the same IP/hostname but port 3003 for local network
-          this.serverUrl = `${protocol}//${hostname}:3003`;
+          this.serverUrl = `${protocol}//${hostname}:3001`;
         }
       }
       

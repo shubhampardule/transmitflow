@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Wifi, WifiOff, Zap, Shield, Coffee, Globe, Lock, ArrowLeftRight, Rocket, Users } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Zap, Shield, Globe, Lock, ArrowLeftRight, Rocket, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TransferState } from '@/types';
@@ -16,6 +16,7 @@ import { generateRoomCode } from '@/lib/file-utils';
 import SendFilesPanel from './SendFilesPanel';
 import ReceiveFilesPanel from './ReceiveFilesPanel';
 import TransferProgress from './TransferProgress';
+import ThemeToggle from './ui/ThemeToggle';
 
 export default function P2PFileTransfer() {
   console.log('=== P2PFileTransfer COMPONENT RENDERING ===');
@@ -406,17 +407,56 @@ export default function P2PFileTransfer() {
   }, [handleReset]);
 
   return (
-    <div className="min-h-screen w-full relative">
+    <div className="min-h-screen w-full relative transition-all duration-500 ease-in-out">
       {/* Radial Gradient Background from Bottom */}
       <div
-        className="absolute inset-0 z-0"
+        className="absolute inset-0 z-0 transition-opacity duration-500 ease-in-out"
         style={{
           background: "radial-gradient(125% 125% at 50% 90%, #fff 40%, #6366f1 100%)",
         }}
       />
+      {/* Dark mode background - Ocean Night */}
+      <div 
+        className="absolute inset-0 z-0 dark:block hidden transition-opacity duration-500 ease-in-out"
+        style={{
+          background: `
+            linear-gradient(135deg, 
+              #0c1445 0%, 
+              #1e1b4b 25%, 
+              #312e81 50%, 
+              #1e1b4b 75%, 
+              #0c1445 100%
+            )
+          `,
+        }}
+      />
+      
+      {/* Subtle animated stars/particles for dark mode */}
+      <div
+        className="absolute inset-0 z-0 dark:block hidden opacity-30 transition-opacity duration-500 ease-in-out"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.3) 0%, transparent 50%),
+            radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.2) 0%, transparent 50%),
+            radial-gradient(circle at 40% 80%, rgba(59, 130, 246, 0.2) 0%, transparent 50%),
+            radial-gradient(circle at 90% 90%, rgba(168, 85, 247, 0.2) 0%, transparent 50%)
+          `,
+        }}
+      />
+      
+      {/* Theme Toggle - Desktop only */}
+      <div className="absolute top-6 right-6 z-20 hidden md:block">
+        <ThemeToggle />
+      </div>
+      
       {/* Your Content/Components */}
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6">
-        <Card className="w-full max-w-2xl bg-background/80 backdrop-blur-xl border-white/20 shadow-2xl">
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6 transition-all duration-500 ease-in-out">
+        <Card className="w-full max-w-2xl bg-background/80 backdrop-blur-xl border-white/20 shadow-2xl dark:bg-gray-800/80 dark:border-gray-700/50 transition-all duration-500 ease-in-out relative">
+          {/* Theme Toggle - Mobile only, inside card */}
+          <div className="absolute top-4 right-4 z-30 md:hidden">
+            <ThemeToggle />
+          </div>
+          
           <CardHeader className="text-center">
             <div className="flex items-center justify-center gap-3 mb-4">
               <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500">
@@ -434,10 +474,10 @@ export default function P2PFileTransfer() {
               </div>
             </div>
             
-            <CardTitle className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent leading-tight pb-2">
+            <CardTitle className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent leading-tight pb-2 dark:from-blue-300 dark:to-purple-300 transition-all duration-500 ease-in-out">
               TransmitFlow
             </CardTitle>
-            <CardDescription className="text-lg text-muted-foreground">
+            <CardDescription className="text-lg text-muted-foreground dark:text-gray-300 transition-colors duration-500 ease-in-out">
               Seamless file transmission
             </CardDescription>
           </CardHeader>
@@ -494,85 +534,85 @@ export default function P2PFileTransfer() {
               {/* Features Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
                 {/* True Peer-to-Peer */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-blue-100">
-                      <ArrowLeftRight className="h-6 w-6 text-blue-600" />
+                    <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/50 transition-all duration-500 ease-in-out">
+                      <ArrowLeftRight className="h-6 w-6 text-blue-600 dark:text-blue-400 transition-colors duration-500 ease-in-out" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">True Peer-to-Peer</h3>
+                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">True Peer-to-Peer</h3>
                   </div>
-                  <p className="text-black/70 text-sm">
+                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
                     Files sent directly device-to-device using WebRTC. No cloud, no intermediaries.
                   </p>
                 </div>
 
                 {/* Absolute Privacy */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-green-100">
-                      <Lock className="h-6 w-6 text-green-600" />
+                    <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/50 transition-all duration-500 ease-in-out">
+                      <Lock className="h-6 w-6 text-green-600 dark:text-green-400 transition-colors duration-500 ease-in-out" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Absolute Privacy</h3>
+                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Absolute Privacy</h3>
                   </div>
-                  <p className="text-black/70 text-sm">
+                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
                     Your files never touch our servers. We don&apos;t see, store, or track them.
                   </p>
                 </div>
 
                 {/* Secure & Encrypted */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-red-100">
-                      <Shield className="h-6 w-6 text-red-600" />
+                    <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/50 transition-all duration-500 ease-in-out">
+                      <Shield className="h-6 w-6 text-red-600 dark:text-red-400 transition-colors duration-500 ease-in-out" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Secure & Encrypted</h3>
+                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Secure & Encrypted</h3>
                   </div>
-                  <p className="text-black/70 text-sm">
+                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
                     Secure connections with isolated rooms for end-to-end protection.
                   </p>
                 </div>
 
                 {/* Limitless High-Speed */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-indigo-100">
-                      <Rocket className="h-6 w-6 text-indigo-600" />
+                    <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 transition-all duration-500 ease-in-out">
+                      <Rocket className="h-6 w-6 text-indigo-600 dark:text-indigo-400 transition-colors duration-500 ease-in-out" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Limitless High-Speed</h3>
+                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Limitless High-Speed</h3>
                   </div>
-                  <p className="text-black/70 text-sm">
+                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
                     Transfer files of any size with smart chunking to maximize network speed.
                   </p>
                 </div>
 
                 {/* Universal Compatibility */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-purple-100">
-                      <Globe className="h-6 w-6 text-purple-600" />
+                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/50 transition-all duration-500 ease-in-out">
+                      <Globe className="h-6 w-6 text-purple-600 dark:text-purple-400 transition-colors duration-500 ease-in-out" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Universal Compatibility</h3>
+                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Universal Compatibility</h3>
                   </div>
-                  <p className="text-black/70 text-sm">
+                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
                     Works instantly in any modern browser on any platform. No app required.
                   </p>
                 </div>
 
                 {/* Open & Community Driven */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50">
+                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-teal-100">
-                      <Users className="h-6 w-6 text-teal-600" />
+                    <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-900/50 transition-all duration-500 ease-in-out">
+                      <Users className="h-6 w-6 text-teal-600 dark:text-teal-400 transition-colors duration-500 ease-in-out" />
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90">Open & Community Driven</h3>
+                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Open & Community Driven</h3>
                   </div>
-                  <p className="text-black/70 text-sm">
+                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
                     Fully open-source for transparency. Help us improve on{' '}
                     <a 
                       href="https://github.com/10neWOlF/transmitflow" 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-teal-600 hover:text-teal-700 font-medium"
+                      className="text-teal-600 hover:text-teal-700 font-medium dark:text-teal-400 dark:hover:text-teal-300 transition-colors duration-300 ease-in-out"
                     >
                       GitHub
                     </a>.
@@ -581,24 +621,24 @@ export default function P2PFileTransfer() {
               </div>
 
               {/* Support Section */}
-              <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-6 border border-white/50 text-center">
+              <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-6 border border-white/50 text-center dark:bg-gradient-to-r dark:from-orange-500/30 dark:to-yellow-500/30 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
                 <div className="flex items-center justify-center gap-2 mb-3">
-                  <div className="p-2 rounded-lg bg-orange-100">
-                    <Users className="h-6 w-6 text-orange-600" />
+                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/50 transition-all duration-500 ease-in-out">
+                    <Users className="h-6 w-6 text-orange-600 dark:text-orange-400 transition-colors duration-500 ease-in-out" />
                   </div>
-                  <h3 className="text-xl font-semibold text-black/90">Support Our Work</h3>
+                  <h3 className="text-xl font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Support Our Work</h3>
                 </div>
-                <p className="text-black/70 mb-4">
+                <p className="text-black/70 mb-4 dark:text-gray-300 transition-colors duration-500 ease-in-out">
                   Love using TransmitFlow? Help us keep it free and running smoothly!
                 </p>
                 <a
                   href="https://buymeacoffee.com/10newolf"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200"
+                  className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 ease-in-out"
                 >
-                  <Coffee className="h-5 w-5" />
-                  Buy me a coffee
+                  <Users className="h-5 w-5" />
+                  Support Our Work
                 </a>
               </div>
             </div>
@@ -607,9 +647,9 @@ export default function P2PFileTransfer() {
         
         {/* Website Info */}
         <div className="mt-6 w-full max-w-2xl text-center">
-          <div className="text-black/80">
-            <h3 className="text-lg font-semibold mb-2">TransmitFlow</h3>
-            <p className="text-sm text-black/70">
+          <div className="text-black/80 dark:text-white/80 transition-colors duration-500 ease-in-out">
+            <h3 className="text-lg font-semibold mb-2 transition-colors duration-500 ease-in-out">TransmitFlow</h3>
+            <p className="text-sm text-black/70 dark:text-gray-300 transition-colors duration-500 ease-in-out">
               No servers, no limits, direct device-to-device transfer
             </p>
           </div>
@@ -617,7 +657,7 @@ export default function P2PFileTransfer() {
         
         {/* Social Media Links - Outside the main card */}
         <div className="mt-8 w-full max-w-2xl">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-black/80">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-black/80 dark:text-white/80">
             <div className="text-sm">
               Built with ❤️ for secure P2P file sharing
             </div>
@@ -626,7 +666,7 @@ export default function P2PFileTransfer() {
                 href="https://github.com/10neWOlF"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-black/60 hover:text-black transition-colors"
+                className="text-black/60 hover:text-black transition-colors dark:text-white/60 dark:hover:text-white"
                 title="GitHub"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
@@ -637,7 +677,7 @@ export default function P2PFileTransfer() {
                 href="https://x.com/ShubhamPardule"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-black/60 hover:text-black transition-colors"
+                className="text-black/60 hover:text-black transition-colors dark:text-white/60 dark:hover:text-white"
                 title="X (Twitter)"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">

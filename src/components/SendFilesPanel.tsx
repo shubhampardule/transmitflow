@@ -220,7 +220,7 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
             <p className="text-sm text-muted-foreground">
               Drop files here or click to browse
               <br />
-              <span className="flex items-center justify-center gap-1 text-xs text-yellow-700 dark:text-yellow-400 mt-1 w-full text-center">
+              <span className="flex items-center justify-center gap-1 text-xs text-yellow-700 dark:text-yellow-300 mt-1 w-full text-center">
                 Large files may crash or fail to download, especially on mobile.
               </span>
             </p>
