@@ -11,6 +11,8 @@
 **Send files instantly between devices without any servers storing your data - Seamless file transfer made simple.**
 > **⚠️ Note:** Large file transfers (e.g., 1GB+) may use significant memory on your device. On mobile or low-RAM devices, very large transfers can cause performance issues or browser crashes. For best results, use chunked transfers and avoid sending extremely large files on mobile.
 
+> **🔄 Updated: August 24, 2025 - Stable release with improved file transfer reliability**
+
 [🚀 Live Demo](https://transmitflow.com) • [📖 Documentation](https://github.com/10neWOlF/transmitflow/wiki) • [🐛 Report Bug](https://github.com/10neWOlF/transmitflow/issues) • [✨ Request Feature](https://github.com/10neWOlF/transmitflow/issues)
 
 > **Deployed on Vercel for fast, global delivery.**
@@ -63,10 +65,7 @@
 
 <div align="center">
 
-<img width="1920" height="1440" alt="133shots_so" src="https://github.com/user-attachments/assets/367085c5-77a8-4936-bc91-881f73436ac5" />
-<img width="1920" height="1440" alt="232shots_so" src="https://github.com/user-attachments/assets/33b97039-c3ea-498d-a670-f69c8855a23c" />
-<img width="1920" height="1440" alt="365shots_so" src="https://github.com/user-attachments/assets/0bd6dbb8-0340-4e65-a930-c645aa965e53" />
-
+![Feature Demo: P2P File Transfer in Action](https://via.placeholder.com/800x400/0066cc/ffffff?text=🚀+P2P+File+Transfer+Demo)
 
 *Share files instantly with just a QR code scan!*
 
