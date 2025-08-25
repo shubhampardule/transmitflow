@@ -61,7 +61,7 @@
 </tr>
 </table>
 
-## ✨ Features
+## ✨ Feature
 
 <div align="center">
 
