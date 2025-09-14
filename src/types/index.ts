@@ -79,8 +79,8 @@ export type SignalingMessage =
   | TransferCancelledMessage;
 
 export interface DataChannelMessage {
-  type: 'file-list' | 'file-meta' | 'transfer-complete' | 'transfer-cancelled' | 'file-cancelled' | 'progress-sync';
-  data?: FileMetadata[] | FileMetadata | { cancelledBy: 'sender' | 'receiver' } | { fileIndex: number; fileName: string; cancelledBy: 'sender' | 'receiver' } | FileTransferProgress;
+  type: 'file-list' | 'file-meta' | 'transfer-complete' | 'transfer-cancelled' | 'file-cancelled' | 'progress-sync' | 'file-complete';
+  data?: FileMetadata[] | FileMetadata | { cancelledBy: 'sender' | 'receiver' } | { fileIndex: number; fileName: string; cancelledBy: 'sender' | 'receiver' } | FileTransferProgress | { fileIndex: number };
 }
 
 export type UserRole = 'sender' | 'receiver' | null;
