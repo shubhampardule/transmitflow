@@ -194,11 +194,11 @@ export default function TransferProgress({
       {/* Room Code - Only show during initial connection phase */}
       {(transferState.status === 'idle' || transferState.status === 'connecting') && (
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col justify-center">
-                <h3 className="font-medium text-left">Room Code</h3>
-                <p className="text-2xl font-mono font-bold tracking-wider text-left">{roomCode}</p>
+          <CardContent className="py-6">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex flex-col justify-center h-full">
+                <h3 className="font-medium">Room Code</h3>
+                <p className="text-2xl font-mono font-bold tracking-wider">{roomCode}</p>
               </div>
               <div className="flex gap-2 flex-wrap">
                 <Button onClick={copyRoomCode} variant="outline" size="sm">
@@ -240,12 +240,12 @@ export default function TransferProgress({
 
       {/* Status */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
+        <CardContent className="py-6">
+          <div className="flex items-center gap-4 h-16">
             {statusInfo.icon}
-            <div className="flex-1 flex flex-col justify-center">
-              <h3 className="font-medium text-lg text-left">{statusInfo.title}</h3>
-              <p className="text-muted-foreground text-left">{statusInfo.description}</p>
+            <div className="flex-1 flex flex-col justify-center h-full">
+              <h3 className="font-medium text-lg">{statusInfo.title}</h3>
+              <p className="text-muted-foreground">{statusInfo.description}</p>
             </div>
           </div>
         </CardContent>
