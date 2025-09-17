@@ -1,24 +1,9 @@
-// OPTIMIZED WebRTC Implementation for Mobile and Large Files
-// Uses binary transfer with ArrayBuffer for maximum performance
+// HYBRID WebRTC Implementation for Optimal Performance
+// Uses binary transfer for phone->PC and Base64 for PC->phone
+// Best of both worlds: speed where it works, reliability everywhere
 
 import { FileMetadata, SignalingMessage } from '@/types';
 import { signalingService } from './signaling';
-
-// Adaptive configuration based on device capabilities
-const CONFIG = {
-  // Adaptive chunk sizes
-  CHUNK_SIZE_MOBILE: 64 * 1024,      // 64KB for mobile
-  CHUNK_SIZE_DESKTOP: 256 * 1024,    // 256KB for desktop
-  CHUNK_SIZE_MAX: 1024 * 1024,       // 1MB max chunk for very fast connections
-  
-  // Buffer management
-  BUFFER_HIGH_THRESHOLD: 8 * 1024 * 1024,  // 8MB high water mark
-  BUFFER_LOW_THRESHOLD: 2 * 1024 * 1024,   // 2MB low water mark
-  
-  // Performance
-  PARALLEL_CHUNKS: 10,                // Send up to 10 chunks in parallel
-  PROGRESS_UPDATE_INTERVAL: 250,      // Update progress every 250ms
-};
 
 // Detect if mobile device
 const isMobileDevice = () => {
@@ -27,15 +12,33 @@ const isMobileDevice = () => {
     || window.innerWidth < 768;
 };
 
-// Message types for control channel (JSON)
+// Adaptive configuration based on sender device
+const CONFIG = {
+  // Mobile senders (to PC): Use binary for speed
+  BINARY_CHUNK_SIZE: 256 * 1024,         // 256KB for binary transfer
+  BINARY_BUFFER_THRESHOLD: 1024 * 1024,  // 1MB buffer
+  
+  // PC senders (to mobile): Use Base64 for reliability
+  BASE64_CHUNK_SIZE: 64 * 1024,          // 64KB for Base64 (mobile-friendly)
+  BASE64_BUFFER_THRESHOLD: 256 * 1024,   // 256KB buffer
+  
+  ACK_TIMEOUT: 2000,
+  MAX_RETRIES: 5,
+  PROGRESS_UPDATE_INTERVAL: 250,
+};
+
+// Message types for both protocols
 const MSG_TYPE = {
   FILE_LIST: 'FILE_LIST',
   FILE_START: 'FILE_START',
-  FILE_CHUNK_BINARY: 'FILE_CHUNK_BINARY',  // Notification that binary chunk is coming
+  FILE_CHUNK_BINARY: 'FILE_CHUNK_BINARY',  // Binary chunk notification
+  FILE_CHUNK_BASE64: 'FILE_CHUNK_BASE64',  // Base64 chunk data
   FILE_COMPLETE: 'FILE_COMPLETE',
   CHUNK_ACK: 'CHUNK_ACK',
   TRANSFER_COMPLETE: 'TRANSFER_COMPLETE',
-  CANCEL: 'CANCEL',
+  CONVERSION_PROGRESS: 'CONVERSION_PROGRESS',
+  FILE_CANCEL: 'FILE_CANCEL',              // Individual file cancellation
+  CANCEL: 'CANCEL',                        // Full transfer cancellation
   ERROR: 'ERROR',
   SPEED_TEST: 'SPEED_TEST',
   SPEED_RESULT: 'SPEED_RESULT',
@@ -51,24 +54,29 @@ interface ControlMessage {
   chunkIndex?: number;
   totalChunks?: number;
   chunkSize?: number;
+  data?: string; // Base64 encoded chunk data
   files?: FileMetadata[];
   message?: string;
-  speed?: number;
+  conversionProgress?: number;
+  stage?: 'converting' | 'transferring';
+  cancelledBy?: 'sender' | 'receiver';
+  transferMethod?: 'binary' | 'base64';
 }
 
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
-  private binaryChannel: RTCDataChannel | null = null; // Separate channel for binary data
+  private binaryChannel: RTCDataChannel | null = null; // For binary transfers
   private roomCode: string = '';
   private role: 'sender' | 'receiver' | null = null;
   
-  // Adaptive settings
-  private chunkSize: number = isMobileDevice() ? CONFIG.CHUNK_SIZE_MOBILE : CONFIG.CHUNK_SIZE_DESKTOP;
-  private measuredSpeed: number = 0;
+  // Transfer method detection
+  private senderIsMobile: boolean = false;
+  private transferMethod: 'binary' | 'base64' = 'base64';
   
-  // Internal method for binary chunk handling
-  private setWaitingForChunk?: (fileIndex: number, chunkIndex: number) => void;
+  // Adaptive settings
+  private chunkSize: number = CONFIG.BASE64_CHUNK_SIZE;
+  private bufferThreshold: number = CONFIG.BASE64_BUFFER_THRESHOLD;
   
   // ICE configuration
   private readonly config: RTCConfiguration = {
@@ -86,6 +94,7 @@ export class WebRTCService {
     iceTransportPolicy: 'all',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
+    iceCandidatePoolSize: 10,
   };
   
   // Event handlers
@@ -105,32 +114,39 @@ export class WebRTCService {
     conversionProgress?: number;
   }) => void;
   public onTransferComplete?: () => void;
-  public onError?: (error: string) => void;
-  public onStatusMessage?: (message: string) => void;
   public onTransferCancelled?: (cancelledBy: 'sender' | 'receiver') => void;
   public onFileCancelled?: (data: { fileIndex: number; fileName: string; cancelledBy: 'sender' | 'receiver' }) => void;
+  public onError?: (error: string) => void;
+  public onStatusMessage?: (message: string) => void;
   
   // Sender state
   private filesToSend: File[] = [];
-  private currentSendFileIndex = 0;
-  private sendProgress = new Map<number, {
-    bytesSent: number;
-    totalBytes: number;
+  private currentSendIndex = 0;
+  private sendChunksMap = new Map<number, string[]>(); // For Base64 chunks
+  private sendProgressMap = new Map<number, {
+    sentChunks: Set<number>;
+    totalChunks: number;
     startTime: number;
     lastProgressUpdate: number;
   }>();
+  private cancelledFiles = new Set<number>(); // Track cancelled file indices
   
-  // Receiver state - Optimized for binary chunks
+  // Receiver state - hybrid approach
   private receivedFiles = new Map<number, {
     metadata: FileMetadata;
-    chunks: ArrayBuffer[];
-    expectedChunks: number;
-    receivedBytes: number;
+    chunks: Map<number, string | ArrayBuffer>; // Support both types
+    totalChunks: number;
+    receivedChunks: Set<number>;
     startTime: number;
+    complete: boolean;
+    transferMethod: 'binary' | 'base64';
   }>();
   
-  private expectedChunkIndex = new Map<number, number>(); // Track next expected chunk per file
+  private expectedFiles: FileMetadata[] = [];
   private connectionTimeout: NodeJS.Timeout | null = null;
+  
+  // Binary channel handling
+  private setWaitingForChunk?: (fileIndex: number, chunkIndex: number) => void;
 
   get currentRole(): 'sender' | 'receiver' | null {
     return this.role;
@@ -141,7 +157,21 @@ export class WebRTCService {
     this.role = 'sender';
     this.filesToSend = files;
     
-    this.onStatusMessage?.('Preparing connection...');
+    // Detect if sender is mobile to choose transfer method
+    this.senderIsMobile = isMobileDevice();
+    this.transferMethod = this.senderIsMobile ? 'binary' : 'base64';
+    
+    if (this.transferMethod === 'binary') {
+      this.chunkSize = CONFIG.BINARY_CHUNK_SIZE;
+      this.bufferThreshold = CONFIG.BINARY_BUFFER_THRESHOLD;
+      console.log('Mobile sender detected: Using binary transfer for maximum speed');
+    } else {
+      this.chunkSize = CONFIG.BASE64_CHUNK_SIZE;
+      this.bufferThreshold = CONFIG.BASE64_BUFFER_THRESHOLD;
+      console.log('PC sender detected: Using Base64 transfer for mobile compatibility');
+    }
+    
+    this.onStatusMessage?.('Preparing to send files...');
     
     await this.createPeerConnection();
     this.createDataChannels();
@@ -180,9 +210,9 @@ export class WebRTCService {
       
       if (state === 'connected') {
         this.clearConnectionTimeout();
-        this.onStatusMessage?.('Connected! Optimizing transfer speed...');
+        this.onStatusMessage?.('Connected! Preparing transfer...');
       } else if (state === 'failed') {
-        this.onError?.('Connection failed.');
+        this.onError?.('Connection failed. Please try again.');
         this.cleanup();
       }
     };
@@ -206,15 +236,19 @@ export class WebRTCService {
       ordered: true,
     });
     
-    // Binary channel for file data (unordered for speed)
-    this.binaryChannel = this.peerConnection!.createDataChannel('binary', {
-      ordered: true, // Keep ordered but with no retransmits for speed
-      maxRetransmits: 3,
-    });
-    this.binaryChannel.binaryType = 'arraybuffer';
+    // Binary channel only for binary transfers
+    if (this.transferMethod === 'binary') {
+      this.binaryChannel = this.peerConnection!.createDataChannel('binary', {
+        ordered: true,
+        maxRetransmits: 3,
+      });
+      this.binaryChannel.binaryType = 'arraybuffer';
+    }
     
     this.setupDataChannelHandlers();
-    this.setupBinaryChannelHandlers();
+    if (this.binaryChannel) {
+      this.setupBinaryChannelHandlers();
+    }
   }
 
   private setupDataChannelReceivers(): void {
@@ -240,13 +274,18 @@ export class WebRTCService {
       this.onDataChannelOpen?.();
       
       if (this.role === 'sender' && this.filesToSend.length > 0) {
-        // Perform speed test then start transfer
-        setTimeout(() => this.performSpeedTest(), 500);
+        setTimeout(() => this.startTransfer(), 100);
       }
     };
     
     this.dataChannel.onclose = () => {
       this.onDataChannelClose?.();
+      this.onStatusMessage?.('Connection closed');
+    };
+    
+    this.dataChannel.onerror = (error) => {
+      console.error('Data channel error:', error);
+      this.onError?.('Connection error occurred');
     };
     
     this.dataChannel.onmessage = async (event) => {
@@ -274,7 +313,6 @@ export class WebRTCService {
     
     this.binaryChannel.onmessage = (event) => {
       if (waitingForChunk && event.data instanceof ArrayBuffer) {
-        // Clear timeout and process chunk
         clearTimeout(waitingForChunk.timeout);
         this.handleBinaryChunk(waitingForChunk.fileIndex, waitingForChunk.chunkIndex, event.data);
         waitingForChunk = null;
@@ -283,84 +321,28 @@ export class WebRTCService {
       }
     };
     
-    // Store reference for control messages with proper typing
     this.setWaitingForChunk = (fileIndex: number, chunkIndex: number) => {
-      // Clear any existing timeout
       if (waitingForChunk) {
         clearTimeout(waitingForChunk.timeout);
       }
       
-      // Set up new waiting state with timeout
       const timeout = setTimeout(() => {
         console.error(`Timeout waiting for chunk ${chunkIndex} of file ${fileIndex}`);
         waitingForChunk = null;
-      }, 5000); // 5 second timeout for chunk arrival
+      }, 5000);
       
       waitingForChunk = { fileIndex, chunkIndex, timeout };
     };
   }
 
-  // Speed test to optimize chunk size
-  private async performSpeedTest(): Promise<void> {
-    if (!this.binaryChannel || this.binaryChannel.readyState !== 'open') {
-      // Skip speed test if binary channel not ready
-      this.startTransfer();
-      return;
-    }
-    
-    const testSize = 1024 * 1024; // 1MB test
-    const testData = new ArrayBuffer(testSize);
-    const startTime = Date.now();
-    
-    this.sendControlMessage({ type: MSG_TYPE.SPEED_TEST });
-    
-    try {
-      this.binaryChannel.send(testData);
-      
-      // Wait for acknowledgment (with timeout)
-      await new Promise((resolve) => {
-        const timeout = setTimeout(resolve, 5000);
-        const originalHandler = this.dataChannel!.onmessage;
-        
-        this.dataChannel!.onmessage = (event) => {
-          const message = JSON.parse(event.data);
-          if (message.type === MSG_TYPE.SPEED_RESULT) {
-            clearTimeout(timeout);
-            const duration = Date.now() - startTime;
-            this.measuredSpeed = (testSize / duration) * 1000; // bytes per second
-            
-            // Adapt chunk size based on speed
-            if (this.measuredSpeed > 10 * 1024 * 1024) { // > 10MB/s
-              this.chunkSize = CONFIG.CHUNK_SIZE_MAX;
-            } else if (this.measuredSpeed > 1 * 1024 * 1024) { // > 1MB/s
-              this.chunkSize = CONFIG.CHUNK_SIZE_DESKTOP;
-            } else {
-              this.chunkSize = CONFIG.CHUNK_SIZE_MOBILE;
-            }
-            
-            console.log(`Speed test: ${(this.measuredSpeed / 1024 / 1024).toFixed(2)} MB/s, using chunk size: ${this.chunkSize / 1024}KB`);
-            this.dataChannel!.onmessage = originalHandler;
-            resolve(undefined);
-          } else if (originalHandler && this.dataChannel) {
-            originalHandler.call(this.dataChannel, event);
-          }
-        };
-      });
-    } catch (error) {
-      console.warn('Speed test failed, using default chunk size:', error);
-    }
-    
-    this.startTransfer();
-  }
-
-  // OPTIMIZED BINARY TRANSFER
+  // SENDER METHODS - Hybrid approach
   private async startTransfer(): Promise<void> {
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
       this.onError?.('Connection not ready');
       return;
     }
     
-    // Send file list
+    // Send file list with transfer method info
     const fileList: FileMetadata[] = this.filesToSend.map((file, index) => ({
       name: file.name,
       size: file.size,
@@ -372,32 +354,38 @@ export class WebRTCService {
     this.sendControlMessage({
       type: MSG_TYPE.FILE_LIST,
       files: fileList,
+      transferMethod: this.transferMethod,
     });
     
-    this.onStatusMessage?.('Starting optimized transfer...');
+    this.onStatusMessage?.(`Starting transfer (${this.transferMethod} mode)...`);
     
-    // Process files
+    // Process all files
     for (let i = 0; i < this.filesToSend.length; i++) {
-      await this.sendFileBinary(i);
+      if (this.transferMethod === 'binary') {
+        await this.sendFileBinary(i);
+      } else {
+        await this.sendFileBase64(i);
+      }
     }
     
     this.sendControlMessage({ type: MSG_TYPE.TRANSFER_COMPLETE });
     this.onTransferComplete?.();
-    this.onStatusMessage?.('Transfer complete!');
+    this.onStatusMessage?.('All files sent successfully!');
   }
 
+  // Binary transfer method (mobile to PC)
   private async sendFileBinary(fileIndex: number): Promise<void> {
     const file = this.filesToSend[fileIndex];
-    if (!file) return;
+    if (!file || this.cancelledFiles.has(fileIndex)) return;
     
     const totalChunks = Math.ceil(file.size / this.chunkSize);
     
-    console.log(`Sending ${file.name}: ${totalChunks} chunks of ${this.chunkSize / 1024}KB`);
+    console.log(`Sending ${file.name} via binary: ${totalChunks} chunks of ${this.chunkSize / 1024}KB`);
     
     // Initialize progress
-    this.sendProgress.set(fileIndex, {
-      bytesSent: 0,
-      totalBytes: file.size,
+    this.sendProgressMap.set(fileIndex, {
+      sentChunks: new Set(),
+      totalChunks,
       startTime: Date.now(),
       lastProgressUpdate: Date.now(),
     });
@@ -412,25 +400,23 @@ export class WebRTCService {
       lastModified: file.lastModified,
       totalChunks,
       chunkSize: this.chunkSize,
+      transferMethod: 'binary',
     });
     
-    // Stream file in chunks without converting to base64
+    // Stream file in chunks
     let offset = 0;
     let chunkIndex = 0;
     
-    while (offset < file.size) {
+    while (offset < file.size && !this.cancelledFiles.has(fileIndex)) {
       const chunkSize = Math.min(this.chunkSize, file.size - offset);
       const chunk = file.slice(offset, offset + chunkSize);
       
-      // Read as ArrayBuffer (much faster than base64)
       const arrayBuffer = await chunk.arrayBuffer();
       
       // Wait for buffer space
-      while (this.binaryChannel!.bufferedAmount > CONFIG.BUFFER_HIGH_THRESHOLD) {
+      while (this.binaryChannel!.bufferedAmount > this.bufferThreshold) {
         await new Promise(resolve => setTimeout(resolve, 10));
       }
-      
-      console.log(`Sending chunk ${chunkIndex}/${totalChunks - 1} for ${file.name} (${arrayBuffer.byteLength} bytes)`);
       
       // Send control message first
       this.sendControlMessage({
@@ -444,13 +430,7 @@ export class WebRTCService {
       await new Promise(resolve => setTimeout(resolve, 5));
       
       // Then send binary data
-      try {
-        this.binaryChannel!.send(arrayBuffer);
-      } catch (error) {
-        console.error(`Failed to send chunk ${chunkIndex}:`, error);
-        this.onError?.(`Failed to send chunk ${chunkIndex} of ${file.name}`);
-        return;
-      }
+      this.binaryChannel!.send(arrayBuffer);
       
       offset += chunkSize;
       chunkIndex++;
@@ -458,26 +438,156 @@ export class WebRTCService {
       // Update progress
       this.updateSendProgress(fileIndex, offset, file.size);
       
-      // Small delay between chunks to prevent overwhelming the receiver
+      // Small delay between chunks
       await new Promise(resolve => setTimeout(resolve, 1));
     }
     
-    // Send completion
+    if (!this.cancelledFiles.has(fileIndex)) {
+      this.sendControlMessage({
+        type: MSG_TYPE.FILE_COMPLETE,
+        fileIndex,
+        fileName: file.name,
+      });
+    }
+  }
+
+  // Base64 transfer method (PC to mobile) - from working implementation
+  private async sendFileBase64(fileIndex: number): Promise<void> {
+    const file = this.filesToSend[fileIndex];
+    if (!file || this.cancelledFiles.has(fileIndex)) return;
+    
+    console.log(`Sending file ${fileIndex}: ${file.name} (${file.size} bytes) via Base64`);
+    
+    // Show conversion start
+    this.onTransferProgress?.({
+      fileName: file.name,
+      fileIndex,
+      progress: 0,
+      bytesTransferred: 0,
+      totalBytes: file.size,
+      speed: 0,
+      stage: 'converting',
+    });
+    
+    // Convert file to chunks
+    const chunks = await this.fileToChunks(file, fileIndex);
+    if (chunks.length === 0) return; // Cancelled during conversion
+    
+    this.sendChunksMap.set(fileIndex, chunks);
+    
+    // Initialize progress tracking
+    this.sendProgressMap.set(fileIndex, {
+      sentChunks: new Set(),
+      totalChunks: chunks.length,
+      startTime: Date.now(),
+      lastProgressUpdate: Date.now(),
+    });
+    
+    // Send file start message
     this.sendControlMessage({
-      type: MSG_TYPE.FILE_COMPLETE,
+      type: MSG_TYPE.FILE_START,
       fileIndex,
       fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type || 'application/octet-stream',
+      lastModified: file.lastModified,
+      totalChunks: chunks.length,
+      transferMethod: 'base64',
+    });
+    
+    // Send all chunks with flow control
+    for (let i = 0; i < chunks.length && !this.cancelledFiles.has(fileIndex); i++) {
+      await this.sendChunkWithFlowControl(fileIndex, i, chunks[i]);
+      
+      // Update progress
+      const progress = this.sendProgressMap.get(fileIndex)!;
+      progress.sentChunks.add(i);
+      
+      const percentComplete = (progress.sentChunks.size / progress.totalChunks) * 100;
+      const bytesTransferred = progress.sentChunks.size * this.chunkSize;
+      const elapsed = (Date.now() - progress.startTime) / 1000;
+      const speed = elapsed > 0 ? bytesTransferred / elapsed : 0;
+      
+      this.onTransferProgress?.({
+        fileName: file.name,
+        fileIndex,
+        progress: percentComplete,
+        bytesTransferred: Math.min(bytesTransferred, file.size),
+        totalBytes: file.size,
+        speed,
+        stage: 'transferring',
+      });
+    }
+    
+    if (!this.cancelledFiles.has(fileIndex)) {
+      this.sendControlMessage({
+        type: MSG_TYPE.FILE_COMPLETE,
+        fileIndex,
+        fileName: file.name,
+      });
+    }
+  }
+
+  private async sendChunkWithFlowControl(fileIndex: number, chunkIndex: number, data: string): Promise<void> {
+    while (this.dataChannel && this.dataChannel.bufferedAmount > this.bufferThreshold) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    
+    this.sendControlMessage({
+      type: MSG_TYPE.FILE_CHUNK_BASE64,
+      fileIndex,
+      chunkIndex,
+      data,
     });
   }
 
+  private async fileToChunks(file: File, fileIndex: number): Promise<string[]> {
+    const chunks: string[] = [];
+    const reader = new FileReader();
+    const totalChunks = Math.ceil(file.size / this.chunkSize);
+    
+    for (let offset = 0; offset < file.size; offset += this.chunkSize) {
+      if (this.cancelledFiles.has(fileIndex)) {
+        console.log(`File ${fileIndex} cancelled during conversion, stopping`);
+        return [];
+      }
+      
+      const slice = file.slice(offset, Math.min(offset + this.chunkSize, file.size));
+      const chunkIndex = chunks.length;
+      
+      const conversionProgress = Math.round((chunkIndex / totalChunks) * 100);
+      this.onTransferProgress?.({
+        fileName: file.name,
+        fileIndex,
+        progress: conversionProgress,
+        bytesTransferred: offset,
+        totalBytes: file.size,
+        speed: 0,
+        stage: 'converting',
+        conversionProgress,
+      });
+      
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(slice);
+      });
+      
+      chunks.push(base64);
+    }
+    
+    return chunks;
+  }
+
   private updateSendProgress(fileIndex: number, bytesSent: number, totalBytes: number): void {
-    const progress = this.sendProgress.get(fileIndex);
+    const progress = this.sendProgressMap.get(fileIndex);
     if (!progress) return;
     
-    progress.bytesSent = bytesSent;
     const now = Date.now();
     
-    // Throttle progress updates
     if (now - progress.lastProgressUpdate > CONFIG.PROGRESS_UPDATE_INTERVAL) {
       const elapsed = (now - progress.startTime) / 1000;
       const speed = elapsed > 0 ? bytesSent / elapsed : 0;
@@ -497,11 +607,11 @@ export class WebRTCService {
     }
   }
 
-  // RECEIVER METHODS
+  // RECEIVER METHODS - Hybrid support
   private async handleControlMessage(message: ControlMessage): Promise<void> {
     switch (message.type) {
       case MSG_TYPE.FILE_LIST:
-        this.handleFileList(message.files!);
+        this.handleFileList(message.files!, message.transferMethod);
         break;
         
       case MSG_TYPE.FILE_START:
@@ -509,39 +619,43 @@ export class WebRTCService {
         break;
         
       case MSG_TYPE.FILE_CHUNK_BINARY:
-        // Prepare to receive binary chunk
         this.setWaitingForChunk?.(message.fileIndex!, message.chunkIndex!);
+        break;
+        
+      case MSG_TYPE.FILE_CHUNK_BASE64:
+        this.handleBase64Chunk(message);
         break;
         
       case MSG_TYPE.FILE_COMPLETE:
         await this.handleFileComplete(message);
         break;
         
-      case MSG_TYPE.SPEED_TEST:
-        // Respond to speed test
-        this.sendControlMessage({ type: MSG_TYPE.SPEED_RESULT });
+      case MSG_TYPE.FILE_CANCEL:
+        this.handleFileCancel(message);
         break;
         
       case MSG_TYPE.TRANSFER_COMPLETE:
         this.onTransferComplete?.();
-        this.onStatusMessage?.('Transfer complete!');
+        this.onStatusMessage?.('All files received successfully!');
         break;
         
       case MSG_TYPE.ERROR:
-        this.onError?.(message.message || 'Transfer error');
+        this.onError?.(message.message || 'Transfer error occurred');
         break;
     }
   }
 
-  private handleFileList(files: FileMetadata[]): void {
+  private handleFileList(files: FileMetadata[], transferMethod?: string): void {
+    console.log('Received file list:', files, 'Method:', transferMethod);
+    this.expectedFiles = files;
     this.onIncomingFiles?.(files);
-    this.onStatusMessage?.('Ready to receive files');
+    this.onStatusMessage?.(`Ready to receive files (${transferMethod || 'unknown'} mode)`);
   }
 
   private handleFileStart(message: ControlMessage): void {
-    const { fileIndex, fileName, fileSize, fileType, lastModified, totalChunks } = message;
+    const { fileIndex, fileName, fileSize, fileType, lastModified, totalChunks, transferMethod } = message;
     
-    console.log(`Receiving ${fileName}: ${totalChunks} chunks`);
+    console.log(`Starting to receive file ${fileIndex}: ${fileName} (${totalChunks} chunks, ${transferMethod} mode)`);
     
     this.receivedFiles.set(fileIndex!, {
       metadata: {
@@ -551,13 +665,14 @@ export class WebRTCService {
         lastModified: lastModified!,
         fileIndex: fileIndex!,
       },
-      chunks: new Array(totalChunks!), // Pre-allocate array with correct size
-      expectedChunks: totalChunks!,
-      receivedBytes: 0,
+      chunks: new Map(),
+      totalChunks: totalChunks!,
+      receivedChunks: new Set(),
       startTime: Date.now(),
+      complete: false,
+      transferMethod: (transferMethod as 'binary' | 'base64') || 'base64',
     });
     
-    this.expectedChunkIndex.set(fileIndex!, 0);
     this.onStatusMessage?.(`Receiving ${fileName}...`);
   }
 
@@ -568,35 +683,82 @@ export class WebRTCService {
       return;
     }
     
-    // Check if chunk already received (avoid duplicates)
-    if (fileInfo.chunks[chunkIndex]) {
+    if (fileInfo.receivedChunks.has(chunkIndex)) {
       console.warn(`Duplicate chunk ${chunkIndex} for file ${fileIndex}`);
       return;
     }
     
-    // Store chunk directly as ArrayBuffer (no conversion needed)
-    fileInfo.chunks[chunkIndex] = data;
-    fileInfo.receivedBytes += data.byteLength;
+    fileInfo.chunks.set(chunkIndex, data);
+    fileInfo.receivedChunks.add(chunkIndex);
     
-    // Count actual received chunks (filter out undefined)
-    const receivedChunks = fileInfo.chunks.filter(chunk => chunk !== undefined).length;
+    console.log(`File ${fileIndex}: Received binary chunk ${chunkIndex}/${fileInfo.totalChunks - 1} (${fileInfo.receivedChunks.size}/${fileInfo.totalChunks} total)`);
     
-    // Update progress based on actual received chunks
-    const progress = (receivedChunks / fileInfo.expectedChunks) * 100;
+    this.updateReceiveProgress(fileIndex, fileInfo);
+  }
+
+  private handleBase64Chunk(message: ControlMessage): void {
+    const { fileIndex, chunkIndex, data } = message;
+    
+    const fileInfo = this.receivedFiles.get(fileIndex!);
+    if (!fileInfo) {
+      console.error(`Received chunk for unknown file ${fileIndex}`);
+      return;
+    }
+    
+    if (fileInfo.receivedChunks.has(chunkIndex!)) {
+      console.warn(`Duplicate chunk ${chunkIndex} for file ${fileIndex}`);
+      return;
+    }
+    
+    fileInfo.chunks.set(chunkIndex!, data!);
+    fileInfo.receivedChunks.add(chunkIndex!);
+    
+    if (fileInfo.receivedChunks.size % 10 === 0 || fileInfo.receivedChunks.size === fileInfo.totalChunks) {
+      console.log(`File ${fileIndex}: ${fileInfo.receivedChunks.size}/${fileInfo.totalChunks} Base64 chunks received`);
+    }
+    
+    this.updateReceiveProgress(fileIndex!, fileInfo);
+  }
+
+  private handleFileCancel(message: ControlMessage): void {
+    const { fileIndex, fileName, cancelledBy } = message;
+    
+    if (fileIndex !== undefined) {
+      this.cancelledFiles.add(fileIndex);
+      this.receivedFiles.delete(fileIndex);
+      
+      this.onFileCancelled?.({
+        fileIndex,
+        fileName: fileName!,
+        cancelledBy: cancelledBy!,
+      });
+      
+      console.log(`File ${fileIndex} (${fileName}) cancelled by ${cancelledBy}`);
+    }
+  }
+
+  private updateReceiveProgress(fileIndex: number, fileInfo: {
+    metadata: FileMetadata;
+    chunks: Map<number, string | ArrayBuffer>;
+    totalChunks: number;
+    receivedChunks: Set<number>;
+    startTime: number;
+    complete: boolean;
+    transferMethod: 'binary' | 'base64';
+  }): void {
+    const progress = (fileInfo.receivedChunks.size / fileInfo.totalChunks) * 100;
+    const bytesReceived = fileInfo.receivedChunks.size * this.chunkSize;
     const elapsed = (Date.now() - fileInfo.startTime) / 1000;
-    const speed = elapsed > 0 ? fileInfo.receivedBytes / elapsed : 0;
-    
-    console.log(`File ${fileIndex}: Received chunk ${chunkIndex}/${fileInfo.expectedChunks - 1} (${receivedChunks}/${fileInfo.expectedChunks} total)`);
+    const speed = elapsed > 0 ? bytesReceived / elapsed : 0;
     
     this.onTransferProgress?.({
       fileName: fileInfo.metadata.name,
       fileIndex,
       progress,
-      bytesTransferred: fileInfo.receivedBytes,
+      bytesTransferred: Math.min(bytesReceived, fileInfo.metadata.size),
       totalBytes: fileInfo.metadata.size,
       speed,
       stage: 'transferring',
-      conversionProgress: undefined,
     });
   }
 
@@ -610,48 +772,76 @@ export class WebRTCService {
     }
     
     // Validate that all chunks are received
-    const receivedChunks = fileInfo.chunks.filter(chunk => chunk !== undefined).length;
-    const missingChunks = fileInfo.expectedChunks - receivedChunks;
+    const missingChunks: number[] = [];
+    for (let i = 0; i < fileInfo.totalChunks; i++) {
+      if (!fileInfo.receivedChunks.has(i)) {
+        missingChunks.push(i);
+      }
+    }
     
-    if (missingChunks > 0) {
-      console.error(`❌ File incomplete: ${fileName} (missing ${missingChunks} chunks)`);
-      this.onError?.(`Transfer incomplete: ${fileName} (missing ${missingChunks} chunks)`);
+    if (missingChunks.length > 0) {
+      console.error(`❌ File incomplete: ${fileName} (missing ${missingChunks.length} chunks: ${missingChunks.slice(0, 10).join(', ')}${missingChunks.length > 10 ? '...' : ''})`);
+      this.onError?.(`Transfer incomplete: ${fileName} (missing ${missingChunks.length} chunks)`);
       return;
     }
     
-    // Verify all chunk indices are present (no gaps)
-    for (let i = 0; i < fileInfo.expectedChunks; i++) {
-      if (!fileInfo.chunks[i]) {
-        console.error(`❌ Missing chunk ${i} for file ${fileName}`);
-        this.onError?.(`Transfer incomplete: ${fileName} (missing chunk ${i})`);
-        return;
-      }
-    }
-    
-    console.log(`Reconstructing ${fileName} from ${receivedChunks} chunks`);
+    console.log(`All chunks received for ${fileName}, reconstructing file...`);
     
     try {
-      // Combine ArrayBuffer chunks (much faster than base64)
-      const totalSize = fileInfo.chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-      const combined = new Uint8Array(totalSize);
-      let offset = 0;
+      let file: File;
       
-      for (const chunk of fileInfo.chunks) {
-        combined.set(new Uint8Array(chunk), offset);
-        offset += chunk.byteLength;
+      if (fileInfo.transferMethod === 'binary') {
+        // Reconstruct from ArrayBuffer chunks
+        const totalSize = Array.from(fileInfo.chunks.values()).reduce((sum, chunk) => 
+          sum + (chunk as ArrayBuffer).byteLength, 0);
+        const combined = new Uint8Array(totalSize);
+        let offset = 0;
+        
+        for (let i = 0; i < fileInfo.totalChunks; i++) {
+          const chunk = fileInfo.chunks.get(i) as ArrayBuffer;
+          combined.set(new Uint8Array(chunk), offset);
+          offset += chunk.byteLength;
+        }
+        
+        file = new File([combined], fileInfo.metadata.name, {
+          type: fileInfo.metadata.type,
+          lastModified: fileInfo.metadata.lastModified,
+        });
+      } else {
+        // Reconstruct from Base64 chunks
+        const binaryChunks: Uint8Array[] = [];
+        let totalSize = 0;
+        
+        for (let i = 0; i < fileInfo.totalChunks; i++) {
+          const base64Chunk = fileInfo.chunks.get(i) as string;
+          const binaryString = atob(base64Chunk);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let j = 0; j < binaryString.length; j++) {
+            bytes[j] = binaryString.charCodeAt(j);
+          }
+          binaryChunks.push(bytes);
+          totalSize += bytes.length;
+        }
+        
+        const combinedArray = new Uint8Array(totalSize);
+        let offset = 0;
+        for (const chunk of binaryChunks) {
+          combinedArray.set(chunk, offset);
+          offset += chunk.length;
+        }
+        
+        file = new File([combinedArray], fileInfo.metadata.name, {
+          type: fileInfo.metadata.type || 'application/octet-stream',
+          lastModified: fileInfo.metadata.lastModified,
+        });
       }
-      
-      // Create file
-      const file = new File([combined], fileInfo.metadata.name, {
-        type: fileInfo.metadata.type,
-        lastModified: fileInfo.metadata.lastModified,
-      });
       
       console.log(`✅ File reconstructed: ${fileName} (${file.size} bytes)`);
       
+      fileInfo.complete = true;
       this.onFileReceived?.(file);
       
-      // Final progress
+      // Final progress update
       this.onTransferProgress?.({
         fileName: fileInfo.metadata.name,
         fileIndex: fileIndex!,
@@ -660,11 +850,10 @@ export class WebRTCService {
         totalBytes: file.size,
         speed: 0,
         stage: 'transferring',
-        conversionProgress: undefined,
       });
       
     } catch (error) {
-      console.error(`Failed to reconstruct ${fileName}:`, error);
+      console.error(`Failed to reconstruct file ${fileName}:`, error);
       this.onError?.(`Failed to process ${fileName}`);
     }
   }
@@ -684,7 +873,7 @@ export class WebRTCService {
       switch (message.type) {
         case 'offer':
           if (this.role === 'receiver') {
-            this.onStatusMessage?.('Connecting...');
+            this.onStatusMessage?.('Sender found! Establishing connection...');
             await this.peerConnection!.setRemoteDescription(message.payload);
             const answer = await this.peerConnection!.createAnswer();
             await this.peerConnection!.setLocalDescription(answer);
@@ -698,7 +887,7 @@ export class WebRTCService {
           
         case 'answer':
           if (this.role === 'sender') {
-            this.onStatusMessage?.('Finalizing connection...');
+            this.onStatusMessage?.('Receiver connected! Establishing data channel...');
             await this.peerConnection!.setRemoteDescription(message.payload);
           }
           break;
@@ -707,20 +896,20 @@ export class WebRTCService {
           try {
             await this.peerConnection!.addIceCandidate(message.payload);
           } catch {
-            // ICE errors are common, ignore
+            // ICE candidate errors are common and usually harmless
           }
           break;
       }
     } catch (error) {
       console.error('Signaling error:', error);
-      this.onError?.('Connection failed');
+      this.onError?.('Connection setup failed');
     }
   }
 
   private setConnectionTimeout(duration: number = 30000): void {
     this.connectionTimeout = setTimeout(() => {
       if (this.peerConnection?.connectionState !== 'connected') {
-        this.onError?.('Connection timeout');
+        this.onError?.('Connection timeout. Please try again.');
         this.cleanup();
       }
     }, duration);
@@ -753,25 +942,43 @@ export class WebRTCService {
     
     signalingService.removeAllListeners();
     
-    // Clear state
+    // Clear all state
     this.filesToSend = [];
-    this.sendProgress.clear();
+    this.currentSendIndex = 0;
+    this.sendChunksMap.clear();
+    this.sendProgressMap.clear();
     this.receivedFiles.clear();
-    this.expectedChunkIndex.clear();
+    this.expectedFiles = [];
+    this.cancelledFiles.clear();
     this.role = null;
     this.roomCode = '';
-    this.currentSendFileIndex = 0;
     
     this.onStatusMessage?.('Disconnected');
   }
 
+  // Cancel methods - restored from working implementation
   cancelTransfer(): void {
     this.sendControlMessage({ type: MSG_TYPE.CANCEL });
     this.cleanup();
   }
 
   cancelFile(fileIndex: number, fileName: string): void {
-    console.log(`Cancel not implemented for individual files in optimized version - ${fileName} (index: ${fileIndex})`);
+    // Add to cancelled files set
+    this.cancelledFiles.add(fileIndex);
+    
+    // Send cancellation message to peer
+    this.sendControlMessage({
+      type: MSG_TYPE.FILE_CANCEL,
+      fileIndex,
+      fileName,
+      cancelledBy: this.role as 'sender' | 'receiver',
+    });
+    
+    // Remove from send progress if it exists
+    this.sendProgressMap.delete(fileIndex);
+    this.sendChunksMap.delete(fileIndex);
+    
+    console.log(`Cancelled file ${fileIndex} (${fileName})`);
   }
 }
 
