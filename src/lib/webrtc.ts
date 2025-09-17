@@ -20,6 +20,7 @@ const MSG_TYPE = {
   FILE_COMPLETE: 'FILE_COMPLETE',
   CHUNK_ACK: 'CHUNK_ACK',
   TRANSFER_COMPLETE: 'TRANSFER_COMPLETE',
+  CONVERSION_PROGRESS: 'CONVERSION_PROGRESS',
   CANCEL: 'CANCEL',
   ERROR: 'ERROR',
 };
@@ -36,6 +37,8 @@ interface ChunkMessage {
   data?: string; // Base64 encoded chunk
   files?: FileMetadata[];
   message?: string;
+  conversionProgress?: number;
+  stage?: 'converting' | 'transferring';
 }
 
 export class WebRTCService {
@@ -292,6 +295,15 @@ export class WebRTCService {
       stage: 'transferring',
     });
     
+    // Send conversion complete to receiver
+    this.sendMessage({
+      type: MSG_TYPE.CONVERSION_PROGRESS,
+      fileIndex,
+      fileName: file.name,
+      conversionProgress: 100,
+      stage: 'transferring',
+    });
+    
     // Initialize progress tracking
     this.sendProgressMap.set(fileIndex, {
       sentChunks: new Set(),
@@ -366,7 +378,7 @@ export class WebRTCService {
       const slice = file.slice(offset, Math.min(offset + CONFIG.CHUNK_SIZE, file.size));
       const chunkIndex = chunks.length;
       
-      // Show conversion progress
+      // Show conversion progress locally
       const conversionProgress = Math.round((chunkIndex / totalChunks) * 100);
       this.onTransferProgress?.({
         fileName: file.name,
@@ -377,6 +389,15 @@ export class WebRTCService {
         speed: 0,
         stage: 'converting',
         conversionProgress,
+      });
+      
+      // Send conversion progress to receiver
+      this.sendMessage({
+        type: MSG_TYPE.CONVERSION_PROGRESS,
+        fileIndex,
+        fileName: file.name,
+        conversionProgress,
+        stage: 'converting',
       });
       
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -412,6 +433,10 @@ export class WebRTCService {
         
       case MSG_TYPE.FILE_COMPLETE:
         this.handleFileComplete(message);
+        break;
+        
+      case MSG_TYPE.CONVERSION_PROGRESS:
+        this.handleConversionProgress(message);
         break;
         
       case MSG_TYPE.TRANSFER_COMPLETE:
@@ -454,6 +479,22 @@ export class WebRTCService {
     });
     
     this.onStatusMessage?.(`Receiving ${fileName}...`);
+  }
+
+  private handleConversionProgress(message: ChunkMessage): void {
+    const { fileIndex, fileName, conversionProgress, stage } = message;
+    
+    // Update progress for the receiver to show sender's conversion progress
+    this.onTransferProgress?.({
+      fileName: fileName!,
+      fileIndex: fileIndex!,
+      progress: conversionProgress || 0,
+      bytesTransferred: 0,
+      totalBytes: 0, // We don't know the total size yet during conversion
+      speed: 0,
+      stage: stage || 'converting',
+      conversionProgress: conversionProgress,
+    });
   }
 
   private handleFileChunk(message: ChunkMessage): void {
