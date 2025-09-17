@@ -14,14 +14,15 @@ const isMobileDevice = () => {
 
 // Adaptive configuration based on sender device
 const CONFIG = {
-  // Mobile senders (to PC): Use smaller chunks for memory efficiency
-  BINARY_CHUNK_SIZE_SMALL: 32 * 1024,    // 32KB for large files (>5MB) on mobile
-  BINARY_CHUNK_SIZE_NORMAL: 128 * 1024,  // 128KB for smaller files on mobile
-  BINARY_BUFFER_THRESHOLD: 512 * 1024,   // 512KB buffer (reduced for mobile)
+  // PC senders (to mobile): Use binary for speed
+  BINARY_CHUNK_SIZE_SMALL: 32 * 1024,    // 32KB for large files
+  BINARY_CHUNK_SIZE_NORMAL: 128 * 1024,  // 128KB for normal files
+  BINARY_BUFFER_THRESHOLD: 512 * 1024,   // 512KB buffer
   
-  // PC senders (to mobile): Use Base64 for reliability
-  BASE64_CHUNK_SIZE: 64 * 1024,          // 64KB for Base64 (mobile-friendly)
-  BASE64_BUFFER_THRESHOLD: 256 * 1024,   // 256KB buffer
+  // Mobile senders (to PC): Use Base64 for reliability
+  BASE64_CHUNK_SIZE: 64 * 1024,                    // 64KB for normal files
+  BASE64_CHUNK_SIZE_MOBILE_SMALL: 32 * 1024,       // 32KB for large files on mobile
+  BASE64_BUFFER_THRESHOLD: 256 * 1024,             // 256KB buffer
   
   // File size thresholds
   LARGE_FILE_THRESHOLD: 5 * 1024 * 1024, // 5MB threshold for chunk size adjustment
@@ -164,26 +165,29 @@ export class WebRTCService {
     
     // Detect if sender is mobile to choose transfer method
     this.senderIsMobile = isMobileDevice();
-    this.transferMethod = this.senderIsMobile ? 'binary' : 'base64';
+    // REVERSED: Base64 for mobile senders (more reliable), binary for PC senders (faster)
+    this.transferMethod = this.senderIsMobile ? 'base64' : 'binary';
     
     if (this.transferMethod === 'binary') {
-      // Adaptive chunk size based on total file sizes
+      // PC sender: Use binary for speed
+      this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_NORMAL;
+      this.bufferThreshold = CONFIG.BINARY_BUFFER_THRESHOLD;
+      console.log('🖥️ PC sender: Using binary transfer for maximum speed');
+    } else {
+      // Mobile sender: Use Base64 for reliability with optimized chunk sizes
       const totalFileSize = files.reduce((sum, file) => sum + file.size, 0);
       const hasLargeFiles = files.some(file => file.size > CONFIG.LARGE_FILE_THRESHOLD);
       
       if (hasLargeFiles || totalFileSize > CONFIG.LARGE_FILE_THRESHOLD) {
-        this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_SMALL;
-        console.log('Large files detected: Using small chunks (32KB) for mobile memory efficiency');
+        // Use smaller chunks for large files on mobile
+        this.chunkSize = CONFIG.BASE64_CHUNK_SIZE_MOBILE_SMALL;
+        console.log('📱 Mobile with large files: Using small Base64 chunks for memory efficiency');
       } else {
-        this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_NORMAL;
-        console.log('Small files detected: Using normal chunks (128KB) for mobile speed');
+        this.chunkSize = CONFIG.BASE64_CHUNK_SIZE;
+        console.log('📱 Mobile with small files: Using normal Base64 chunks');
       }
-      this.bufferThreshold = CONFIG.BINARY_BUFFER_THRESHOLD;
-      console.log('Mobile sender detected: Using binary transfer');
-    } else {
-      this.chunkSize = CONFIG.BASE64_CHUNK_SIZE;
       this.bufferThreshold = CONFIG.BASE64_BUFFER_THRESHOLD;
-      console.log('PC sender detected: Using Base64 transfer for mobile compatibility');
+      console.log('📱 Mobile sender: Using Base64 transfer for maximum reliability');
     }
     
     this.onStatusMessage?.('Preparing to send files...');
@@ -563,8 +567,21 @@ export class WebRTCService {
   }
 
   private async sendChunkWithFlowControl(fileIndex: number, chunkIndex: number, data: string): Promise<void> {
-    while (this.dataChannel && this.dataChannel.bufferedAmount > this.bufferThreshold) {
-      await new Promise(resolve => setTimeout(resolve, 10));
+    // More aggressive flow control for mobile devices
+    const bufferLimit = this.senderIsMobile ? this.bufferThreshold * 0.5 : this.bufferThreshold;
+    
+    while (this.dataChannel && this.dataChannel.bufferedAmount > bufferLimit) {
+      // Longer waits for mobile to prevent overwhelming the buffer
+      const waitTime = this.senderIsMobile ? 25 : 10;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    // Add adaptive delay for large files on mobile
+    if (this.senderIsMobile && this.filesToSend[fileIndex].size > CONFIG.LARGE_FILE_THRESHOLD) {
+      const delayPerChunk = Math.min(50, chunkIndex * 2); // Progressive delay up to 50ms
+      if (delayPerChunk > 10) {
+        await new Promise(resolve => setTimeout(resolve, delayPerChunk));
+      }
     }
     
     this.sendControlMessage({
@@ -577,8 +594,12 @@ export class WebRTCService {
 
   private async fileToChunks(file: File, fileIndex: number): Promise<string[]> {
     const chunks: string[] = [];
-    const reader = new FileReader();
     const totalChunks = Math.ceil(file.size / this.chunkSize);
+    
+    console.log(`📱 Converting ${file.name} to ${totalChunks} Base64 chunks (${this.chunkSize} bytes each)`);
+    
+    // Process in smaller batches to avoid memory issues on mobile
+    const batchSize = this.senderIsMobile ? 5 : 20; // Smaller batches for mobile
     
     for (let offset = 0; offset < file.size; offset += this.chunkSize) {
       if (this.cancelledFiles.has(fileIndex)) {
@@ -589,6 +610,7 @@ export class WebRTCService {
       const slice = file.slice(offset, Math.min(offset + this.chunkSize, file.size));
       const chunkIndex = chunks.length;
       
+      // Update conversion progress
       const conversionProgress = Math.round((chunkIndex / totalChunks) * 100);
       this.onTransferProgress?.({
         fileName: file.name,
@@ -601,18 +623,38 @@ export class WebRTCService {
         conversionProgress,
       });
       
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(',')[1]);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(slice);
-      });
-      
-      chunks.push(base64);
+      // Convert chunk to Base64 with error handling
+      try {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          const timeout = setTimeout(() => reject(new Error('FileReader timeout')), 10000);
+          
+          reader.onload = () => {
+            clearTimeout(timeout);
+            const result = reader.result as string;
+            resolve(result.split(',')[1]);
+          };
+          reader.onerror = () => {
+            clearTimeout(timeout);
+            reject(reader.error);
+          };
+          reader.readAsDataURL(slice);
+        });
+        
+        chunks.push(base64);
+        
+        // Add periodic delays for mobile devices to prevent blocking
+        if (this.senderIsMobile && chunkIndex % batchSize === 0 && chunkIndex > 0) {
+          await new Promise(resolve => setTimeout(resolve, 50)); // 50ms break
+        }
+        
+      } catch (error) {
+        console.error(`Failed to convert chunk ${chunkIndex}:`, error);
+        throw new Error(`File conversion failed at chunk ${chunkIndex}`);
+      }
     }
     
+    console.log(`✅ File conversion complete: ${chunks.length} chunks generated`);
     return chunks;
   }
 
@@ -872,28 +914,66 @@ export class WebRTCService {
           lastModified: fileInfo.metadata.lastModified,
         });
       } else {
-        // Reconstruct from Base64 chunks (existing logic)
-        const binaryChunks: Uint8Array[] = [];
+        // Reconstruct from Base64 chunks with optimized memory management
+        console.log('Reconstructing Base64 file with memory optimization...');
+        
+        // Count valid chunks and calculate total size
         let totalSize = 0;
+        const validChunks: { index: number; data: string }[] = [];
         
         for (let i = 0; i < fileInfo.totalChunks; i++) {
           const base64Chunk = fileInfo.chunks.get(i) as string;
-          if (!base64Chunk) continue;
-          
-          const binaryString = atob(base64Chunk);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let j = 0; j < binaryString.length; j++) {
-            bytes[j] = binaryString.charCodeAt(j);
+          if (base64Chunk) {
+            validChunks.push({ index: i, data: base64Chunk });
+            // Estimate size from Base64 (3/4 ratio for Base64 to binary)
+            totalSize += Math.floor((base64Chunk.length * 3) / 4);
           }
-          binaryChunks.push(bytes);
-          totalSize += bytes.length;
         }
         
-        const combinedArray = new Uint8Array(totalSize);
+        console.log(`Reconstructing from ${validChunks.length} Base64 chunks, estimated size: ${totalSize} bytes`);
+        
+        // Process chunks in batches to avoid memory pressure
+        const batchSize = 50; // Process 50 chunks at a time
+        const binaryChunks: Uint8Array[] = [];
+        let actualTotalSize = 0;
+        
+        for (let batchStart = 0; batchStart < validChunks.length; batchStart += batchSize) {
+          const batchEnd = Math.min(batchStart + batchSize, validChunks.length);
+          const batch = validChunks.slice(batchStart, batchEnd);
+          
+          for (const { data: base64Chunk } of batch) {
+            try {
+              const binaryString = atob(base64Chunk);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let j = 0; j < binaryString.length; j++) {
+                bytes[j] = binaryString.charCodeAt(j);
+              }
+              binaryChunks.push(bytes);
+              actualTotalSize += bytes.length;
+            } catch (error) {
+              console.error('Failed to decode Base64 chunk:', error);
+            }
+          }
+          
+          // Add small delay between batches for large files
+          if (fileInfo.metadata.size > CONFIG.LARGE_FILE_THRESHOLD && batchEnd < validChunks.length) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+        }
+        
+        // Combine all chunks efficiently
+        console.log(`Combining ${binaryChunks.length} decoded chunks, actual size: ${actualTotalSize} bytes`);
+        const combinedArray = new Uint8Array(actualTotalSize);
         let offset = 0;
+        
         for (const chunk of binaryChunks) {
           combinedArray.set(chunk, offset);
           offset += chunk.length;
+          
+          // Periodic yield for large reconstructions
+          if (offset % (5 * 1024 * 1024) === 0) { // Every 5MB
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
         }
         
         file = new File([combinedArray], fileInfo.metadata.name, {
