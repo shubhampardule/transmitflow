@@ -39,6 +39,7 @@ const MSG_TYPE = {
   FILE_CHUNK_BINARY: 'FILE_CHUNK_BINARY',  // Binary chunk notification
   FILE_CHUNK_BASE64: 'FILE_CHUNK_BASE64',  // Base64 chunk data
   FILE_COMPLETE: 'FILE_COMPLETE',
+  FILE_ACK: 'FILE_ACK',                    // Acknowledgment that file was successfully received
   CHUNK_ACK: 'CHUNK_ACK',
   TRANSFER_COMPLETE: 'TRANSFER_COMPLETE',
   CONVERSION_PROGRESS: 'CONVERSION_PROGRESS',
@@ -135,6 +136,7 @@ export class WebRTCService {
     lastProgressUpdate: number;
   }>();
   private cancelledFiles = new Set<number>(); // Track cancelled file indices
+  private acknowledgedFiles = new Set<number>(); // Track files confirmed received by peer
   
   // Receiver state - hybrid approach
   private receivedFiles = new Map<number, {
@@ -165,6 +167,12 @@ export class WebRTCService {
     this.roomCode = roomCode;
     this.role = 'sender';
     this.filesToSend = files;
+    
+    // Reset tracking for new transfer
+    this.cancelledFiles.clear();
+    this.acknowledgedFiles.clear();
+    this.sendProgressMap.clear();
+    this.sendChunksMap.clear();
     
     // Detect if sender is mobile to choose transfer method
     this.senderIsMobile = isMobileDevice();
@@ -449,8 +457,10 @@ export class WebRTCService {
     }
     
     this.sendControlMessage({ type: MSG_TYPE.TRANSFER_COMPLETE });
-    this.onTransferComplete?.();
-    this.onStatusMessage?.('All files sent successfully!');
+    this.onStatusMessage?.('All files sent! Waiting for confirmation...');
+    console.log('📤 All files sent, waiting for peer acknowledgments...');
+    
+    // Don't call onTransferComplete yet - wait for acknowledgments via checkTransferCompletion()
   }
 
   // Binary transfer method (mobile to PC)
@@ -552,7 +562,25 @@ export class WebRTCService {
     
     console.log(`Sending file ${fileIndex}: ${file.name} (${file.size} bytes) via Base64`);
     
-    // Show conversion start
+    // Ensure data channel is ready before starting conversion
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+      console.log('⏳ Waiting for data channel to be ready before starting conversion...');
+      // Wait up to 5 seconds for connection
+      for (let i = 0; i < 50; i++) {
+        if (this.dataChannel?.readyState === 'open') break;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+        console.error('❌ Data channel not ready for conversion progress updates');
+        this.onError?.('Connection not ready');
+        return;
+      }
+    }
+    
+    console.log('✅ Data channel ready, starting file conversion with progress updates to receiver');
+    
+    // Show conversion start locally
     this.onTransferProgress?.({
       fileName: file.name,
       fileIndex,
@@ -563,7 +591,7 @@ export class WebRTCService {
       stage: 'converting',
     });
     
-    // Convert file to chunks
+    // Convert file to chunks (this will send progress to receiver)
     const chunks = await this.fileToChunks(file, fileIndex);
     if (chunks.length === 0) return; // Cancelled during conversion
     
@@ -654,6 +682,20 @@ export class WebRTCService {
     
     console.log(`📱 Converting ${file.name} to ${totalChunks} Base64 chunks (${this.chunkSize} bytes each)`);
     
+    // Notify receiver that conversion is starting (if connected)
+    if (this.dataChannel?.readyState === 'open') {
+      this.sendControlMessage({
+        type: MSG_TYPE.CONVERSION_PROGRESS,
+        fileIndex,
+        fileName: file.name,
+        conversionProgress: 0,
+        stage: 'converting',
+      });
+      console.log(`📤 Notified receiver that conversion is starting for ${file.name}`);
+    } else {
+      console.warn(`⚠️ Cannot notify receiver of conversion start - data channel not ready`);
+    }
+    
     // Process in smaller batches to avoid memory issues on mobile
     const batchSize = this.senderIsMobile ? 5 : 20; // Smaller batches for mobile
     
@@ -668,6 +710,8 @@ export class WebRTCService {
       
       // Update conversion progress
       const conversionProgress = Math.round((chunkIndex / totalChunks) * 100);
+      
+      // Update sender's local progress
       this.onTransferProgress?.({
         fileName: file.name,
         fileIndex,
@@ -678,6 +722,36 @@ export class WebRTCService {
         stage: 'converting',
         conversionProgress,
       });
+
+      // Send conversion progress to receiver - THROTTLED to reduce data usage
+      // Only send every 5% or every 10 chunks, whichever is less frequent
+      const shouldSendProgress = (
+        conversionProgress % 5 === 0 || // Every 5%
+        chunkIndex % 10 === 0 || // Every 10 chunks
+        chunkIndex === 0 || // First chunk
+        chunkIndex === totalChunks - 1 // Last chunk
+      );
+      
+      if (shouldSendProgress && this.dataChannel?.readyState === 'open') {
+        const progressMessage = {
+          type: MSG_TYPE.CONVERSION_PROGRESS,
+          fileIndex,
+          fileName: file.name,
+          conversionProgress,
+          stage: 'converting' as const,
+        };
+        
+        try {
+          this.dataChannel.send(JSON.stringify(progressMessage));
+          console.log(`📤 ✅ Throttled conversion progress sent: ${conversionProgress}% for ${file.name}`);
+        } catch (error) {
+          console.error(`📤 ❌ Failed to send conversion progress:`, error);
+        }
+      } else if (!shouldSendProgress) {
+        // Silent - don't log every skipped message to reduce console spam
+      } else {
+        console.warn(`⚠️ Cannot send conversion progress - data channel state: ${this.dataChannel?.readyState || 'null'}`);
+      }      console.log(`🔄 Sender conversion progress: ${conversionProgress}% (chunk ${chunkIndex}/${totalChunks})`);
       
       // Convert chunk to Base64 with error handling
       try {
@@ -741,6 +815,13 @@ export class WebRTCService {
 
   // RECEIVER METHODS - Hybrid support
   private async handleControlMessage(message: ControlMessage): Promise<void> {
+    console.log(`📥 Processing control message:`, {
+      type: message.type,
+      fileIndex: message.fileIndex,
+      fileName: message.fileName,
+      role: this.role
+    });
+    
     switch (message.type) {
       case MSG_TYPE.FILE_LIST:
         this.handleFileList(message.files!, message.transferMethod);
@@ -762,6 +843,15 @@ export class WebRTCService {
         await this.handleFileComplete(message);
         break;
         
+      case MSG_TYPE.FILE_ACK:
+        this.handleFileAck(message);
+        break;
+        
+      case MSG_TYPE.CONVERSION_PROGRESS:
+        console.log(`📥 ✅ Received CONVERSION_PROGRESS message, calling handler...`);
+        this.handleConversionProgress(message);
+        break;
+        
       case MSG_TYPE.FILE_CANCEL:
         this.handleFileCancel(message);
         break;
@@ -774,6 +864,9 @@ export class WebRTCService {
       case MSG_TYPE.ERROR:
         this.onError?.(message.message || 'Transfer error occurred');
         break;
+        
+      default:
+        console.warn(`⚠️ Unknown message type: ${message.type}`);
     }
   }
 
@@ -875,6 +968,113 @@ export class WebRTCService {
     }
   }
 
+  private handleFileAck(message: ControlMessage): void {
+    const { fileIndex, fileName } = message;
+    
+    console.log(`📨 Received FILE_ACK for file ${fileIndex}: ${fileName}`);
+    
+    // Track acknowledged files
+    if (fileIndex !== undefined) {
+      this.acknowledgedFiles.add(fileIndex);
+      
+      const file = this.filesToSend[fileIndex];
+      if (file) {
+        this.onTransferProgress?.({
+          fileName: fileName || file.name,
+          fileIndex,
+          progress: 100,
+          bytesTransferred: file.size,
+          totalBytes: file.size,
+          speed: 0,
+          stage: 'transferring',
+        });
+        
+        console.log(`✅ File ${fileIndex} (${fileName}) confirmed received by peer`);
+      }
+      
+      // Check if all files have been acknowledged
+      this.checkTransferCompletion();
+    }
+  }
+
+  private handleConversionProgress(message: ControlMessage): void {
+    const { fileIndex, fileName, conversionProgress } = message;
+    
+    console.log(`📥 🔄 Received CONVERSION_PROGRESS message:`, {
+      fileIndex,
+      fileName,
+      conversionProgress,
+      role: this.role
+    });
+    
+    if (fileIndex !== undefined && conversionProgress !== undefined) {
+      console.log(`🔄 Processing conversion progress for ${fileName}: ${conversionProgress}%`);
+      
+      if (this.role === 'receiver') {
+        console.log(`📱 Receiver displaying sender's conversion progress: ${conversionProgress}%`);
+        
+        // Receiver seeing sender's conversion progress (PC converting for phone)
+        this.onTransferProgress?.({
+          fileName: fileName || `File ${fileIndex}`,
+          fileIndex,
+          progress: conversionProgress,
+          bytesTransferred: 0, // Unknown for sender conversion
+          totalBytes: 0, // Unknown for sender conversion  
+          speed: 0,
+          stage: 'converting',
+          conversionProgress,
+        });
+        
+        // Update status message for receiver
+        if (conversionProgress === 0) {
+          this.onStatusMessage?.(`Sender is converting ${fileName}...`);
+          console.log(`📱 Status: Sender starting conversion of ${fileName}`);
+        } else if (conversionProgress % 25 === 0 && conversionProgress > 0) {
+          this.onStatusMessage?.(`Sender converting ${fileName}... ${conversionProgress}%`);
+          console.log(`📱 Status: Sender conversion progress: ${conversionProgress}%`);
+        } else if (conversionProgress === 100) {
+          this.onStatusMessage?.(`Sender finished converting ${fileName}, preparing to send...`);
+          console.log(`📱 Status: Sender finished converting ${fileName}`);
+        }
+        
+      } else if (this.role === 'sender') {
+        console.log(`🖥️ Sender seeing receiver's conversion progress: ${conversionProgress}%`);
+        
+        // Sender seeing receiver's conversion progress (phone processing received file)
+        const file = this.filesToSend[fileIndex];
+        if (file) {
+          this.onTransferProgress?.({
+            fileName: fileName || file.name,
+            fileIndex,
+            progress: conversionProgress,
+            bytesTransferred: Math.floor((file.size * conversionProgress) / 100),
+            totalBytes: file.size,
+            speed: 0,
+            stage: 'converting',
+            conversionProgress,
+          });
+        }
+      }
+    } else {
+      console.warn(`⚠️ Invalid conversion progress message:`, message);
+    }
+  }
+
+  private checkTransferCompletion(): void {
+    const totalFiles = this.filesToSend.length;
+    const acknowledgedCount = this.acknowledgedFiles.size;
+    const cancelledCount = this.cancelledFiles.size;
+    
+    console.log(`📊 Transfer status: ${acknowledgedCount}/${totalFiles} acknowledged, ${cancelledCount} cancelled`);
+    
+    // All files either acknowledged or cancelled
+    if (acknowledgedCount + cancelledCount >= totalFiles) {
+      console.log('🎉 All files processed! Transfer complete.');
+      this.onTransferComplete?.();
+      this.onStatusMessage?.('All files sent and confirmed received!');
+    }
+  }
+
   private updateReceiveProgress(fileIndex: number, fileInfo: {
     metadata: FileMetadata;
     chunks: Map<number, string | ArrayBuffer>;
@@ -898,6 +1098,20 @@ export class WebRTCService {
       totalBytes: fileInfo.metadata.size,
       speed,
       stage: 'transferring',
+    });
+  }
+
+  private updateConversionProgress(fileIndex: number, fileName: string, fileSize: number, conversionProgress: number): void {
+    // Show conversion progress for receiver
+    this.onTransferProgress?.({
+      fileName,
+      fileIndex,
+      progress: conversionProgress,
+      bytesTransferred: Math.floor((fileSize * conversionProgress) / 100),
+      totalBytes: fileSize,
+      speed: 0,
+      stage: 'converting',
+      conversionProgress,
     });
   }
 
@@ -1004,6 +1218,23 @@ export class WebRTCService {
         
         console.log(`Reconstructing from ${validChunks.length} Base64 chunks, estimated size: ${totalSize} bytes`);
         
+        // Show conversion start message to receiver
+        this.onStatusMessage?.(`Converting ${fileInfo.metadata.name}...`);
+        
+        // Send conversion start notification to sender
+        this.sendControlMessage({
+          type: MSG_TYPE.CONVERSION_PROGRESS,
+          fileIndex: fileIndex!,
+          fileName: fileInfo.metadata.name,
+          conversionProgress: 0,
+          stage: 'converting',
+        });
+        
+        // Update local progress to show conversion starting  
+        this.updateConversionProgress(fileIndex!, fileInfo.metadata.name, fileInfo.metadata.size, 0);
+        
+        console.log(`🔄 Starting Base64 conversion for ${fileInfo.metadata.name}`);
+        
         // Process chunks in batches to avoid memory pressure
         const batchSize = 50; // Process 50 chunks at a time
         const binaryChunks: Uint8Array[] = [];
@@ -1027,6 +1258,38 @@ export class WebRTCService {
             }
           }
           
+          // Calculate and send conversion progress - THROTTLED
+          const conversionProgress = Math.round((batchEnd / validChunks.length) * 100);
+          
+          // Update receiver's progress FIRST (more important for UX)
+          this.updateConversionProgress(fileIndex!, fileInfo.metadata.name, fileInfo.metadata.size, conversionProgress);
+          
+          // Update status message every 25%
+          if (conversionProgress % 25 === 0 && conversionProgress > 0) {
+            this.onStatusMessage?.(`Converting ${fileInfo.metadata.name}... ${conversionProgress}%`);
+          }
+
+          // Send progress to sender - THROTTLED to reduce data usage
+          // Only send every 10% or significant milestones
+          const shouldSendProgress = (
+            conversionProgress % 10 === 0 || // Every 10%
+            batchStart === 0 || // First batch
+            batchEnd >= validChunks.length // Last batch
+          );
+          
+          if (shouldSendProgress) {
+            this.sendControlMessage({
+              type: MSG_TYPE.CONVERSION_PROGRESS,
+              fileIndex: fileIndex!,
+              fileName: fileInfo.metadata.name,
+              conversionProgress,
+              stage: 'converting',
+            });
+            console.log(`📤 Throttled receiver conversion progress sent: ${conversionProgress}%`);
+          }
+          
+          console.log(`🔄 Base64 conversion progress: ${conversionProgress}% (batch ${batchEnd}/${validChunks.length})`);
+          
           // Add small delay between batches for large files
           if (fileInfo.metadata.size > CONFIG.LARGE_FILE_THRESHOLD && batchEnd < validChunks.length) {
             await new Promise(resolve => setTimeout(resolve, 10));
@@ -1035,12 +1298,60 @@ export class WebRTCService {
         
         // Combine all chunks efficiently
         console.log(`Combining ${binaryChunks.length} decoded chunks, actual size: ${actualTotalSize} bytes`);
+        
+        // Show combining message to receiver
+        this.onStatusMessage?.(`Finalizing ${fileInfo.metadata.name}...`);
+        
+        // Send combining progress notification
+        this.sendControlMessage({
+          type: MSG_TYPE.CONVERSION_PROGRESS,
+          fileIndex: fileIndex!,
+          fileName: fileInfo.metadata.name,
+          conversionProgress: 95,
+          stage: 'converting',
+        });
+        
+        // Update receiver progress for combining phase
+        this.updateConversionProgress(fileIndex!, fileInfo.metadata.name, fileInfo.metadata.size, 95);
+        
+        console.log(`🔄 Combining decoded chunks for ${fileInfo.metadata.name}...`);
+        
         const combinedArray = new Uint8Array(actualTotalSize);
         let offset = 0;
+        const totalChunks = binaryChunks.length;
         
-        for (const chunk of binaryChunks) {
+        for (let i = 0; i < binaryChunks.length; i++) {
+          const chunk = binaryChunks[i];
           combinedArray.set(chunk, offset);
           offset += chunk.length;
+          
+          // Send progress updates during combining - THROTTLED
+          if (i % 100 === 0 || i === totalChunks - 1) {
+            const combiningProgress = 95 + Math.floor((i / totalChunks) * 5); // 95-100%
+            
+            // Update receiver progress FIRST
+            this.updateConversionProgress(fileIndex!, fileInfo.metadata.name, fileInfo.metadata.size, combiningProgress);
+            
+            // Send to sender - THROTTLED (only at significant milestones)
+            const shouldSendCombiningProgress = (
+              i === totalChunks - 1 || // Last chunk always
+              i % 500 === 0 // Every 500 chunks instead of every 100
+            );
+            
+            if (shouldSendCombiningProgress) {
+              this.sendControlMessage({
+                type: MSG_TYPE.CONVERSION_PROGRESS,
+                fileIndex: fileIndex!,
+                fileName: fileInfo.metadata.name,
+                conversionProgress: combiningProgress,
+                stage: 'converting',
+              });
+            }
+            
+            if (combiningProgress === 100) {
+              this.onStatusMessage?.(`Conversion complete: ${fileInfo.metadata.name}`);
+            }
+          }
           
           // Periodic yield for large reconstructions
           if (offset % (5 * 1024 * 1024) === 0) { // Every 5MB
@@ -1079,6 +1390,15 @@ export class WebRTCService {
         stage: 'transferring',
       });
       
+      // Send acknowledgment back to sender that file was successfully received
+      this.sendControlMessage({
+        type: MSG_TYPE.FILE_ACK,
+        fileIndex: fileIndex!,
+        fileName: fileInfo.metadata.name,
+      });
+      
+      console.log(`📤 Sent FILE_ACK for ${fileName} back to sender`);
+      
     } catch (error) {
       console.error(`Failed to reconstruct file ${fileName}:`, error);
       this.onError?.(`Failed to process ${fileName}: ${error}`);
@@ -1089,9 +1409,33 @@ export class WebRTCService {
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
       try {
         this.dataChannel.send(JSON.stringify(message));
+        
+        // Add extra logging for conversion progress messages
+        if (message.type === MSG_TYPE.CONVERSION_PROGRESS) {
+          console.log(`📤 ✅ Successfully sent CONVERSION_PROGRESS message:`, {
+            fileIndex: message.fileIndex,
+            fileName: message.fileName,
+            progress: message.conversionProgress
+          });
+        }
       } catch (error) {
         console.error('Error sending control message:', error);
+        
+        // Add extra logging for conversion progress failures
+        if (message.type === MSG_TYPE.CONVERSION_PROGRESS) {
+          console.error(`📤 ❌ Failed to send CONVERSION_PROGRESS message:`, error);
+        }
       }
+    } else {
+      console.warn(`⚠️ Cannot send control message - data channel not ready:`, {
+        messageType: message.type,
+        channelState: this.dataChannel?.readyState || 'null',
+        message: message.type === MSG_TYPE.CONVERSION_PROGRESS ? {
+          fileIndex: message.fileIndex,
+          fileName: message.fileName,
+          progress: message.conversionProgress
+        } : 'other'
+      });
     }
   }
 
@@ -1182,6 +1526,7 @@ export class WebRTCService {
     this.receivedFiles.clear();
     this.expectedFiles = [];
     this.cancelledFiles.clear();
+    this.acknowledgedFiles.clear();
     this.role = null;
     this.roomCode = '';
     
