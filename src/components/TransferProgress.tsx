@@ -243,9 +243,9 @@ export default function TransferProgress({
         <CardContent className="pt-6">
           <div className="flex items-center gap-4">
             {statusInfo.icon}
-            <div className="flex-1">
-              <h3 className="font-medium text-lg">{statusInfo.title}</h3>
-              <p className="text-muted-foreground">{statusInfo.description}</p>
+            <div className="flex-1 flex flex-col justify-center">
+              <h3 className="font-medium text-lg text-left">{statusInfo.title}</h3>
+              <p className="text-muted-foreground text-left">{statusInfo.description}</p>
             </div>
           </div>
         </CardContent>
@@ -284,12 +284,12 @@ export default function TransferProgress({
                           <div className="text-sm text-muted-foreground">
                             {formatFileSize(file.size || (progress?.totalBytes || 0))}
                             {isCancelled ? (
-                              <> (Cancelled)</>
+                              <> Cancelled</>
                             ) : isFileComplete ? (
-                              <> (Completed)</>
+                              <> Completed</>
                             ) : hasProgress && progress ? (
                               progress.stage === 'converting' ? (
-                                <> (Preparing)</>
+                                <> Preparing</>
                               ) : (
                                 <> (Transferring)</>
                               )
