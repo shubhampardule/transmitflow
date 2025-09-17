@@ -532,6 +532,7 @@ export default function P2PFileTransfer() {
                 onCancel={handleCancelTransfer}
                 onReset={handleReset}
                 onCancelFile={handleCancelFile}
+                role={activeTab}
               />
             )}
           </CardContent>

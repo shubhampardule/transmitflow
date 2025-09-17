@@ -30,6 +30,7 @@ interface TransferProgressProps {
   onCancel: () => void;
   onReset: () => void;
   onCancelFile?: (fileIndex: number) => void;
+  role?: 'send' | 'receive'; // Add role prop to properly determine if user is receiver
 }
 
 export default function TransferProgress({
@@ -39,13 +40,14 @@ export default function TransferProgress({
   onCancel,
   onReset,
   onCancelFile,
+  role,
 }: TransferProgressProps) {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
-  const isReceiver = receivedFiles.length > 0; // Simple check: if we have any received files, we're a receiver
+  const isReceiver = role === 'receive'; // Fix: Use role prop instead of receivedFiles.length
   
-  // Generate QR code when room code is available
+  // Generate QR code when room code is available - ONLY for senders, never for receivers
   useEffect(() => {
-    if (roomCode) {
+    if (roomCode && !isReceiver && role === 'send') {
       const generateQR = async () => {
         try {
           const shareUrl = `${window.location.origin}${window.location.pathname}?receive=${roomCode}`;
@@ -64,7 +66,7 @@ export default function TransferProgress({
       };
       generateQR();
     }
-  }, [roomCode]);
+  }, [roomCode, isReceiver, role]);
   
   const copyRoomCode = async () => {
     try {
@@ -211,8 +213,8 @@ export default function TransferProgress({
         </Card>
       )}
 
-      {/* QR Code - Always show for senders during initial connection phase */}
-      {!isReceiver && qrCodeUrl && (transferState.status === 'idle' || transferState.status === 'connecting') && (
+      {/* QR Code - ONLY show for senders during initial connection phase, NEVER for receivers */}
+      {!isReceiver && role === 'send' && qrCodeUrl && (transferState.status === 'idle' || transferState.status === 'connecting') && (
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-col items-center space-y-4">
@@ -291,7 +293,7 @@ export default function TransferProgress({
                               progress.stage === 'converting' ? (
                                 <> Preparing</>
                               ) : (
-                                <> (Transferring)</>
+                                <> Transferring</>
                               )
                             ) : null}
                           </div>
