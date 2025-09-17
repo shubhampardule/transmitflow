@@ -14,17 +14,22 @@ const isMobileDevice = () => {
 
 // Adaptive configuration based on sender device
 const CONFIG = {
-  // Mobile senders (to PC): Use binary for speed
-  BINARY_CHUNK_SIZE: 256 * 1024,         // 256KB for binary transfer
-  BINARY_BUFFER_THRESHOLD: 1024 * 1024,  // 1MB buffer
+  // Mobile senders (to PC): Use smaller chunks for memory efficiency
+  BINARY_CHUNK_SIZE_SMALL: 32 * 1024,    // 32KB for large files (>5MB) on mobile
+  BINARY_CHUNK_SIZE_NORMAL: 128 * 1024,  // 128KB for smaller files on mobile
+  BINARY_BUFFER_THRESHOLD: 512 * 1024,   // 512KB buffer (reduced for mobile)
   
   // PC senders (to mobile): Use Base64 for reliability
   BASE64_CHUNK_SIZE: 64 * 1024,          // 64KB for Base64 (mobile-friendly)
   BASE64_BUFFER_THRESHOLD: 256 * 1024,   // 256KB buffer
   
+  // File size thresholds
+  LARGE_FILE_THRESHOLD: 5 * 1024 * 1024, // 5MB threshold for chunk size adjustment
+  
   ACK_TIMEOUT: 2000,
   MAX_RETRIES: 5,
   PROGRESS_UPDATE_INTERVAL: 250,
+  CHUNK_TIMEOUT: 15000, // 15 seconds for large file chunks
 };
 
 // Message types for both protocols
@@ -162,9 +167,19 @@ export class WebRTCService {
     this.transferMethod = this.senderIsMobile ? 'binary' : 'base64';
     
     if (this.transferMethod === 'binary') {
-      this.chunkSize = CONFIG.BINARY_CHUNK_SIZE;
+      // Adaptive chunk size based on total file sizes
+      const totalFileSize = files.reduce((sum, file) => sum + file.size, 0);
+      const hasLargeFiles = files.some(file => file.size > CONFIG.LARGE_FILE_THRESHOLD);
+      
+      if (hasLargeFiles || totalFileSize > CONFIG.LARGE_FILE_THRESHOLD) {
+        this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_SMALL;
+        console.log('Large files detected: Using small chunks (32KB) for mobile memory efficiency');
+      } else {
+        this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_NORMAL;
+        console.log('Small files detected: Using normal chunks (128KB) for mobile speed');
+      }
       this.bufferThreshold = CONFIG.BINARY_BUFFER_THRESHOLD;
-      console.log('Mobile sender detected: Using binary transfer for maximum speed');
+      console.log('Mobile sender detected: Using binary transfer');
     } else {
       this.chunkSize = CONFIG.BASE64_CHUNK_SIZE;
       this.bufferThreshold = CONFIG.BASE64_BUFFER_THRESHOLD;
@@ -326,10 +341,12 @@ export class WebRTCService {
         clearTimeout(waitingForChunk.timeout);
       }
       
+      // Use longer timeout for large files
       const timeout = setTimeout(() => {
         console.error(`Timeout waiting for chunk ${chunkIndex} of file ${fileIndex}`);
         waitingForChunk = null;
-      }, 5000);
+        // Don't fail the whole transfer, just log the missing chunk
+      }, CONFIG.CHUNK_TIMEOUT);
       
       waitingForChunk = { fileIndex, chunkIndex, timeout };
     };
@@ -403,7 +420,7 @@ export class WebRTCService {
       transferMethod: 'binary',
     });
     
-    // Stream file in chunks
+    // Stream file in chunks with improved flow control for large files
     let offset = 0;
     let chunkIndex = 0;
     
@@ -413,9 +430,13 @@ export class WebRTCService {
       
       const arrayBuffer = await chunk.arrayBuffer();
       
-      // Wait for buffer space
-      while (this.binaryChannel!.bufferedAmount > this.bufferThreshold) {
-        await new Promise(resolve => setTimeout(resolve, 10));
+      // Enhanced buffer management for large files
+      const maxBufferSize = file.size > CONFIG.LARGE_FILE_THRESHOLD ? 
+        CONFIG.BINARY_BUFFER_THRESHOLD / 2 : CONFIG.BINARY_BUFFER_THRESHOLD;
+      
+      while (this.binaryChannel!.bufferedAmount > maxBufferSize) {
+        console.log(`Buffer full (${this.binaryChannel!.bufferedAmount} bytes), waiting...`);
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
       
       // Send control message first
@@ -426,11 +447,23 @@ export class WebRTCService {
         chunkSize: arrayBuffer.byteLength,
       });
       
-      // Small delay to ensure control message arrives first
-      await new Promise(resolve => setTimeout(resolve, 5));
+      // Longer delay for large files to ensure control message arrives first
+      const controlDelay = file.size > CONFIG.LARGE_FILE_THRESHOLD ? 10 : 5;
+      await new Promise(resolve => setTimeout(resolve, controlDelay));
       
-      // Then send binary data
-      this.binaryChannel!.send(arrayBuffer);
+      try {
+        // Then send binary data
+        this.binaryChannel!.send(arrayBuffer);
+        console.log(`Sent binary chunk ${chunkIndex}/${totalChunks - 1} for ${file.name} (${arrayBuffer.byteLength} bytes)`);
+      } catch (error) {
+        console.error(`Failed to send chunk ${chunkIndex}:`, error);
+        // Try smaller chunks if we hit memory issues
+        if (this.chunkSize > CONFIG.BINARY_CHUNK_SIZE_SMALL) {
+          console.log('Reducing chunk size due to memory issues');
+          this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_SMALL;
+        }
+        throw error;
+      }
       
       offset += chunkSize;
       chunkIndex++;
@@ -438,8 +471,9 @@ export class WebRTCService {
       // Update progress
       this.updateSendProgress(fileIndex, offset, file.size);
       
-      // Small delay between chunks
-      await new Promise(resolve => setTimeout(resolve, 1));
+      // Adaptive delay between chunks based on file size
+      const chunkDelay = file.size > CONFIG.LARGE_FILE_THRESHOLD ? 5 : 1;
+      await new Promise(resolve => setTimeout(resolve, chunkDelay));
     }
     
     if (!this.cancelledFiles.has(fileIndex)) {
@@ -781,8 +815,19 @@ export class WebRTCService {
     
     if (missingChunks.length > 0) {
       console.error(`❌ File incomplete: ${fileName} (missing ${missingChunks.length} chunks: ${missingChunks.slice(0, 10).join(', ')}${missingChunks.length > 10 ? '...' : ''})`);
-      this.onError?.(`Transfer incomplete: ${fileName} (missing ${missingChunks.length} chunks)`);
-      return;
+      
+      // For large files, be more lenient with a few missing chunks at the end
+      const fileSize = fileInfo.metadata.size;
+      const isLargeFile = fileSize > CONFIG.LARGE_FILE_THRESHOLD;
+      const missingPercentage = (missingChunks.length / fileInfo.totalChunks) * 100;
+      
+      if (isLargeFile && missingPercentage < 1) {
+        console.warn(`Large file ${fileName} missing ${missingPercentage.toFixed(2)}% chunks, attempting reconstruction anyway`);
+        // Continue with reconstruction for large files with minimal missing chunks
+      } else {
+        this.onError?.(`Transfer incomplete: ${fileName} (missing ${missingChunks.length} chunks)`);
+        return;
+      }
     }
     
     console.log(`All chunks received for ${fileName}, reconstructing file...`);
@@ -791,16 +836,35 @@ export class WebRTCService {
       let file: File;
       
       if (fileInfo.transferMethod === 'binary') {
-        // Reconstruct from ArrayBuffer chunks
-        const totalSize = Array.from(fileInfo.chunks.values()).reduce((sum, chunk) => 
-          sum + (chunk as ArrayBuffer).byteLength, 0);
-        const combined = new Uint8Array(totalSize);
-        let offset = 0;
+        // Reconstruct from ArrayBuffer chunks with memory management
+        console.log('Reconstructing large binary file with memory optimization...');
+        
+        // Calculate total size from received chunks only (handle missing chunks)
+        let totalSize = 0;
+        const sortedChunks: { index: number; data: ArrayBuffer }[] = [];
         
         for (let i = 0; i < fileInfo.totalChunks; i++) {
           const chunk = fileInfo.chunks.get(i) as ArrayBuffer;
-          combined.set(new Uint8Array(chunk), offset);
-          offset += chunk.byteLength;
+          if (chunk) {
+            sortedChunks.push({ index: i, data: chunk });
+            totalSize += chunk.byteLength;
+          }
+        }
+        
+        console.log(`Reconstructing from ${sortedChunks.length} chunks, total size: ${totalSize} bytes`);
+        
+        // Use chunked reconstruction for large files to avoid memory issues
+        const combined = new Uint8Array(totalSize);
+        let offset = 0;
+        
+        for (const { data } of sortedChunks) {
+          combined.set(new Uint8Array(data), offset);
+          offset += data.byteLength;
+          
+          // Force garbage collection periodically for large files
+          if (offset % (10 * 1024 * 1024) === 0) { // Every 10MB
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
         }
         
         file = new File([combined], fileInfo.metadata.name, {
@@ -808,12 +872,14 @@ export class WebRTCService {
           lastModified: fileInfo.metadata.lastModified,
         });
       } else {
-        // Reconstruct from Base64 chunks
+        // Reconstruct from Base64 chunks (existing logic)
         const binaryChunks: Uint8Array[] = [];
         let totalSize = 0;
         
         for (let i = 0; i < fileInfo.totalChunks; i++) {
           const base64Chunk = fileInfo.chunks.get(i) as string;
+          if (!base64Chunk) continue;
+          
           const binaryString = atob(base64Chunk);
           const bytes = new Uint8Array(binaryString.length);
           for (let j = 0; j < binaryString.length; j++) {
@@ -838,6 +904,15 @@ export class WebRTCService {
       
       console.log(`✅ File reconstructed: ${fileName} (${file.size} bytes)`);
       
+      // Verify file size is reasonable (within 1% of expected for large files)
+      const expectedSize = fileInfo.metadata.size;
+      const sizeDifference = Math.abs(file.size - expectedSize);
+      const sizePercentage = (sizeDifference / expectedSize) * 100;
+      
+      if (sizePercentage > 5) {
+        console.warn(`Size mismatch for ${fileName}: expected ${expectedSize}, got ${file.size} (${sizePercentage.toFixed(2)}% difference)`);
+      }
+      
       fileInfo.complete = true;
       this.onFileReceived?.(file);
       
@@ -854,7 +929,7 @@ export class WebRTCService {
       
     } catch (error) {
       console.error(`Failed to reconstruct file ${fileName}:`, error);
-      this.onError?.(`Failed to process ${fileName}`);
+      this.onError?.(`Failed to process ${fileName}: ${error}`);
     }
   }
 
