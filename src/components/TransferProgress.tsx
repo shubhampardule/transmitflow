@@ -301,8 +301,8 @@ export default function TransferProgress({
                       
                       {/* Action Buttons */}
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {/* Speed and ETA for current file */}
-                        {hasProgress && progress && progress.progress < 100 && (
+                        {/* Speed and ETA for current file - only show during transfer stage */}
+                        {hasProgress && progress && progress.progress < 100 && progress.stage === 'transferring' && (
                           <div className="text-right text-xs text-muted-foreground mr-2">
                             <div>
                               {progress.speed && progress.speed > 0 
@@ -383,7 +383,7 @@ export default function TransferProgress({
                       <div className="space-y-1">
                         <Progress 
                           value={progress ? (progress.stage === 'converting' && progress.conversionProgress ? progress.conversionProgress : progress.progress) : (isCompleted ? 100 : 0)} 
-                          className={`h-2 ${progress?.stage === 'converting' ? '[&>div]:bg-blue-500' : ''}`}
+                          className={`h-2 ${progress?.stage === 'converting' ? '[&>div]:bg-orange-500' : ''}`}
                         />
                         <div className="flex justify-between text-xs text-muted-foreground">
                           <span>
