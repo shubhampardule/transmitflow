@@ -290,7 +290,7 @@ export default function TransferProgress({
                               <> • Transfer completed</>
                             ) : hasProgress && progress ? (
                               progress.stage === 'converting' ? (
-                                <> • Converting to base64 {progress.conversionProgress ? `(${progress.conversionProgress}%)` : ''}</>
+                                <> • Preparing file {progress.conversionProgress ? `(${progress.conversionProgress}%)` : ''}</>
                               ) : (
                                 <> • {formatFileSize(progress.bytesTransferred)} transferring</>
                               )
@@ -383,13 +383,13 @@ export default function TransferProgress({
                       <div className="space-y-1">
                         <Progress 
                           value={progress ? (progress.stage === 'converting' && progress.conversionProgress ? progress.conversionProgress : progress.progress) : (isCompleted ? 100 : 0)} 
-                          className="h-2" 
+                          className={`h-2 ${progress?.stage === 'converting' ? '[&>div]:bg-blue-500' : ''}`}
                         />
                         <div className="flex justify-between text-xs text-muted-foreground">
                           <span>
                             {progress ? (
                               progress.stage === 'converting' && progress.conversionProgress ? 
-                                `${Math.round(progress.conversionProgress)}% converted` : 
+                                `${Math.round(progress.conversionProgress)}% prepared` : 
                                 `${Math.round(progress.progress)}%`
                             ) : (isCompleted ? '100%' : '0%')}
                           </span>
