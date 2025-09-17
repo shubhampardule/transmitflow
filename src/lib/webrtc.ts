@@ -266,9 +266,31 @@ export class WebRTCService {
     
     console.log(`Sending file ${fileIndex}: ${file.name} (${file.size} bytes)`);
     
-    // Convert file to chunks
-    const chunks = await this.fileToChunks(file);
+    // Show conversion start
+    this.onTransferProgress?.({
+      fileName: file.name,
+      fileIndex,
+      progress: 0,
+      bytesTransferred: 0,
+      totalBytes: file.size,
+      speed: 0,
+      stage: 'converting',
+    });
+    
+    // Convert file to chunks (this is where the delay happens)
+    const chunks = await this.fileToChunks(file, fileIndex);
     this.sendChunksMap.set(fileIndex, chunks);
+    
+    // Show conversion complete, transfer starting
+    this.onTransferProgress?.({
+      fileName: file.name,
+      fileIndex,
+      progress: 0,
+      bytesTransferred: 0,
+      totalBytes: file.size,
+      speed: 0,
+      stage: 'transferring',
+    });
     
     // Initialize progress tracking
     this.sendProgressMap.set(fileIndex, {
@@ -335,12 +357,27 @@ export class WebRTCService {
     });
   }
 
-  private async fileToChunks(file: File): Promise<string[]> {
+  private async fileToChunks(file: File, fileIndex: number): Promise<string[]> {
     const chunks: string[] = [];
     const reader = new FileReader();
+    const totalChunks = Math.ceil(file.size / CONFIG.CHUNK_SIZE);
     
     for (let offset = 0; offset < file.size; offset += CONFIG.CHUNK_SIZE) {
       const slice = file.slice(offset, Math.min(offset + CONFIG.CHUNK_SIZE, file.size));
+      const chunkIndex = chunks.length;
+      
+      // Show conversion progress
+      const conversionProgress = Math.round((chunkIndex / totalChunks) * 100);
+      this.onTransferProgress?.({
+        fileName: file.name,
+        fileIndex,
+        progress: conversionProgress,
+        bytesTransferred: offset,
+        totalBytes: file.size,
+        speed: 0,
+        stage: 'converting',
+        conversionProgress,
+      });
       
       const base64 = await new Promise<string>((resolve, reject) => {
         reader.onload = () => {
@@ -491,6 +528,18 @@ export class WebRTCService {
     console.log(`All chunks received for ${fileName}, reconstructing file...`);
     
     try {
+      // Show conversion start for reconstruction
+      this.onTransferProgress?.({
+        fileName: fileInfo.metadata.name,
+        fileIndex: fileIndex!,
+        progress: 100,
+        bytesTransferred: fileInfo.metadata.size,
+        totalBytes: fileInfo.metadata.size,
+        speed: 0,
+        stage: 'converting',
+        conversionProgress: 0,
+      });
+      
       // Combine all chunks in order
       const chunks: string[] = [];
       for (let i = 0; i < fileInfo.totalChunks; i++) {
@@ -505,7 +554,22 @@ export class WebRTCService {
       const binaryChunks: Uint8Array[] = [];
       let totalSize = 0;
       
-      for (const base64Chunk of chunks) {
+      for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+        const base64Chunk = chunks[chunkIdx];
+        
+        // Show conversion progress
+        const conversionProgress = Math.round(((chunkIdx + 1) / chunks.length) * 100);
+        this.onTransferProgress?.({
+          fileName: fileInfo.metadata.name,
+          fileIndex: fileIndex!,
+          progress: 100,
+          bytesTransferred: fileInfo.metadata.size,
+          totalBytes: fileInfo.metadata.size,
+          speed: 0,
+          stage: 'converting',
+          conversionProgress,
+        });
+        
         const binaryString = atob(base64Chunk);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {

@@ -289,7 +289,11 @@ export default function TransferProgress({
                             ) : isFileComplete ? (
                               <> • Transfer completed</>
                             ) : hasProgress && progress ? (
-                              <> • {formatFileSize(progress.bytesTransferred)} {progress.stage === 'converting' ? 'converting' : 'transferring'}</>
+                              progress.stage === 'converting' ? (
+                                <> • Converting to base64 {progress.conversionProgress ? `(${progress.conversionProgress}%)` : ''}</>
+                              ) : (
+                                <> • {formatFileSize(progress.bytesTransferred)} transferring</>
+                              )
                             ) : null}
                           </div>
                         </div>
@@ -378,12 +382,18 @@ export default function TransferProgress({
                     {!isCancelled && (hasProgress || isCompleted) && (
                       <div className="space-y-1">
                         <Progress 
-                          value={progress ? progress.progress : (isCompleted ? 100 : 0)} 
+                          value={progress ? (progress.stage === 'converting' && progress.conversionProgress ? progress.conversionProgress : progress.progress) : (isCompleted ? 100 : 0)} 
                           className="h-2" 
                         />
                         <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>{progress ? Math.round(progress.progress) : (isCompleted ? 100 : 0)}%</span>
-                          {progress && (
+                          <span>
+                            {progress ? (
+                              progress.stage === 'converting' && progress.conversionProgress ? 
+                                `${Math.round(progress.conversionProgress)}% converted` : 
+                                `${Math.round(progress.progress)}%`
+                            ) : (isCompleted ? '100%' : '0%')}
+                          </span>
+                          {progress && progress.stage === 'transferring' && (
                             <span>{formatFileSize(progress.bytesTransferred)} / {formatFileSize(progress.totalBytes)}</span>
                           )}
                         </div>
