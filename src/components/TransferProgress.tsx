@@ -283,6 +283,17 @@ export default function TransferProgress({
                           <div className="font-medium truncate">{file.name}</div>
                           <div className="text-sm text-muted-foreground">
                             {formatFileSize(file.size || (progress?.totalBytes || 0))}
+                            {isCancelled ? (
+                              <> (Cancelled)</>
+                            ) : isFileComplete ? (
+                              <> (Completed)</>
+                            ) : hasProgress && progress ? (
+                              progress.stage === 'converting' ? (
+                                <> (Preparing)</>
+                              ) : (
+                                <> (Transferring)</>
+                              )
+                            ) : null}
                           </div>
                         </div>
                       </div>
