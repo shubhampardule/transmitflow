@@ -14,10 +14,10 @@ const isMobileDevice = () => {
 
 // Adaptive configuration based on sender device
 const CONFIG = {
-  // Mobile senders (to PC): Use binary for speed - no slow conversion on mobile CPU
-  BINARY_CHUNK_SIZE_SMALL: 32 * 1024,          // 32KB for large files on mobile
-  BINARY_CHUNK_SIZE_NORMAL: 128 * 1024,        // 128KB for normal files on mobile
-  BINARY_BUFFER_THRESHOLD: 512 * 1024,         // 512KB buffer for mobile
+  // Mobile senders (to PC): Use binary for speed - optimized for throughput
+  BINARY_CHUNK_SIZE_SMALL: 64 * 1024,          // 64KB for large files on mobile (increased)
+  BINARY_CHUNK_SIZE_NORMAL: 256 * 1024,        // 256KB for normal files on mobile (increased)
+  BINARY_BUFFER_THRESHOLD: 1024 * 1024,        // 1MB buffer for mobile (increased for speed)
   
   // PC senders (to mobile): Use Base64 - PC handles the heavy conversion work
   BASE64_CHUNK_SIZE: 64 * 1024,                // 64KB Base64 chunks
@@ -257,9 +257,11 @@ export class WebRTCService {
     
     // Binary channel only for binary transfers
     if (this.transferMethod === 'binary') {
+      // Create binary channel optimized for high throughput
       this.binaryChannel = this.peerConnection!.createDataChannel('binary', {
         ordered: true,
         maxRetransmits: 3,
+        maxPacketLifeTime: 3000, // 3 second timeout
       });
       this.binaryChannel.binaryType = 'arraybuffer';
     }
@@ -458,13 +460,10 @@ export class WebRTCService {
       
       const arrayBuffer = await chunk.arrayBuffer();
       
-      // Enhanced buffer management for large files
-      const maxBufferSize = file.size > CONFIG.LARGE_FILE_THRESHOLD ? 
-        CONFIG.BINARY_BUFFER_THRESHOLD / 2 : CONFIG.BINARY_BUFFER_THRESHOLD;
-      
-      while (this.binaryChannel!.bufferedAmount > maxBufferSize) {
-        console.log(`Buffer full (${this.binaryChannel!.bufferedAmount} bytes), waiting...`);
-        await new Promise(resolve => setTimeout(resolve, 50));
+      // Optimized buffer management for speed
+      while (this.binaryChannel!.bufferedAmount > CONFIG.BINARY_BUFFER_THRESHOLD) {
+        // Shorter wait time for better throughput
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
       
       // Send control message first
@@ -475,9 +474,8 @@ export class WebRTCService {
         chunkSize: arrayBuffer.byteLength,
       });
       
-      // Longer delay for large files to ensure control message arrives first
-      const controlDelay = file.size > CONFIG.LARGE_FILE_THRESHOLD ? 10 : 5;
-      await new Promise(resolve => setTimeout(resolve, controlDelay));
+      // Minimal delay for control message - optimized for speed
+      await new Promise(resolve => setTimeout(resolve, 2));
       
       try {
         // Then send binary data
@@ -499,9 +497,10 @@ export class WebRTCService {
       // Update progress
       this.updateSendProgress(fileIndex, offset, file.size);
       
-      // Adaptive delay between chunks based on file size
-      const chunkDelay = file.size > CONFIG.LARGE_FILE_THRESHOLD ? 5 : 1;
-      await new Promise(resolve => setTimeout(resolve, chunkDelay));
+      // Minimal delay for speed optimization - only when buffer is getting full
+      if (this.binaryChannel!.bufferedAmount > CONFIG.BINARY_BUFFER_THRESHOLD * 0.8) {
+        await new Promise(resolve => setTimeout(resolve, 2)); // Very small delay only when needed
+      }
     }
     
     if (!this.cancelledFiles.has(fileIndex)) {
