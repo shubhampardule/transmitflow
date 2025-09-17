@@ -159,6 +159,9 @@ export class WebRTCService {
   }
 
   async initializeAsSender(roomCode: string, files: File[]): Promise<void> {
+    console.log(`🚀 Initializing as SENDER for room: ${roomCode}`);
+    console.log(`📁 Files to send: ${files.length} (${files.map(f => f.name).join(', ')})`);
+    
     this.roomCode = roomCode;
     this.role = 'sender';
     this.filesToSend = files;
@@ -167,6 +170,8 @@ export class WebRTCService {
     this.senderIsMobile = isMobileDevice();
     // CORRECT: Binary for mobile senders (fast, no conversion), Base64 for PC senders (PC handles conversion)
     this.transferMethod = this.senderIsMobile ? 'binary' : 'base64';
+    
+    console.log(`📱 Device type: ${this.senderIsMobile ? 'Mobile' : 'PC'}, Transfer method: ${this.transferMethod}`);
     
     if (this.transferMethod === 'binary') {
       // Mobile sender: Use binary for speed (no slow conversion on mobile processor)
@@ -209,51 +214,78 @@ export class WebRTCService {
   }
 
   async initializeAsReceiver(roomCode: string): Promise<void> {
+    console.log(`📥 Initializing as RECEIVER for room: ${roomCode}`);
+    
     this.roomCode = roomCode;
     this.role = 'receiver';
     
     this.onStatusMessage?.('Connecting to sender...');
     
+    console.log('📥 Creating peer connection for receiver...');
     await this.createPeerConnection();
     this.setupDataChannelReceivers();
     
     this.setConnectionTimeout();
+    console.log('📥 Receiver initialization complete, waiting for sender...');
   }
 
   private async createPeerConnection(): Promise<void> {
+    console.log('🔗 Creating WebRTC peer connection...');
     this.peerConnection = new RTCPeerConnection(this.config);
     
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection!.connectionState;
+      console.log(`🔗 Connection state: ${state}`);
       this.onConnectionStateChange?.(state);
       
       if (state === 'connected') {
         this.clearConnectionTimeout();
         this.onStatusMessage?.('Connected! Preparing transfer...');
+        console.log('✅ WebRTC connection established successfully');
       } else if (state === 'failed') {
+        console.error('❌ WebRTC connection failed');
         this.onError?.('Connection failed. Please try again.');
         this.cleanup();
+      } else if (state === 'disconnected') {
+        console.warn('⚠️ WebRTC connection disconnected');
       }
+    };
+    
+    this.peerConnection.oniceconnectionstatechange = () => {
+      const iceState = this.peerConnection!.iceConnectionState;
+      console.log(`🧊 ICE connection state: ${iceState}`);
+    };
+    
+    this.peerConnection.onicegatheringstatechange = () => {
+      const gatheringState = this.peerConnection!.iceGatheringState;
+      console.log(`🧊 ICE gathering state: ${gatheringState}`);
     };
     
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log('🧊 Sending ICE candidate');
         signalingService.sendSignal({
           type: 'ice',
           payload: event.candidate,
           toRoom: this.roomCode,
         });
+      } else {
+        console.log('🧊 ICE gathering complete');
       }
     };
     
     signalingService.onSignal(this.handleSignalingMessage.bind(this));
+    console.log('🔗 Peer connection setup complete');
   }
 
   private createDataChannels(): void {
+    console.log(`📺 Creating data channels for ${this.role} with transfer method: ${this.transferMethod}`);
+    
     // Control channel for JSON messages
     this.dataChannel = this.peerConnection!.createDataChannel('control', {
       ordered: true,
     });
+    console.log('📺 Control data channel created');
     
     // Binary channel only for binary transfers
     if (this.transferMethod === 'binary') {
@@ -261,9 +293,10 @@ export class WebRTCService {
       this.binaryChannel = this.peerConnection!.createDataChannel('binary', {
         ordered: true,
         maxRetransmits: 3,
-        maxPacketLifeTime: 3000, // 3 second timeout
+        // Remove maxPacketLifeTime for better compatibility
       });
       this.binaryChannel.binaryType = 'arraybuffer';
+      console.log('📺 Binary data channel created');
     }
     
     this.setupDataChannelHandlers();
@@ -1063,14 +1096,17 @@ export class WebRTCService {
   }
 
   private async handleSignalingMessage(message: SignalingMessage): Promise<void> {
+    console.log(`📡 Received signaling message: ${message.type}`);
     try {
       switch (message.type) {
         case 'offer':
           if (this.role === 'receiver') {
+            console.log('📡 Processing offer from sender...');
             this.onStatusMessage?.('Sender found! Establishing connection...');
             await this.peerConnection!.setRemoteDescription(message.payload);
             const answer = await this.peerConnection!.createAnswer();
             await this.peerConnection!.setLocalDescription(answer);
+            console.log('📡 Sending answer to sender...');
             signalingService.sendSignal({
               type: 'answer',
               payload: answer,
@@ -1081,12 +1117,14 @@ export class WebRTCService {
           
         case 'answer':
           if (this.role === 'sender') {
+            console.log('📡 Processing answer from receiver...');
             this.onStatusMessage?.('Receiver connected! Establishing data channel...');
             await this.peerConnection!.setRemoteDescription(message.payload);
           }
           break;
           
         case 'ice':
+          console.log('📡 Processing ICE candidate...');
           try {
             await this.peerConnection!.addIceCandidate(message.payload);
           } catch {
