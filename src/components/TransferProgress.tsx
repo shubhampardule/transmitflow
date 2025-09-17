@@ -241,11 +241,11 @@ export default function TransferProgress({
       {/* Status */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center gap-4">
             {statusInfo.icon}
-            <div className="flex-1 flex flex-col justify-center">
-              <h3 className="font-medium text-lg text-left">{statusInfo.title}</h3>
-              <p className="text-muted-foreground text-left">{statusInfo.description}</p>
+            <div className="flex flex-col justify-center items-center">
+              <h3 className="font-medium text-lg">{statusInfo.title}</h3>
+              <p className="text-muted-foreground">{statusInfo.description}</p>
             </div>
           </div>
         </CardContent>
