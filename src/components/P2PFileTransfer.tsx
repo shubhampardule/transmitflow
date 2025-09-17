@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Wifi, WifiOff, Zap, Shield, Globe, Lock, ArrowLeftRight, Rocket, Users } from 'lucide-react';
+import { Upload, Download, Wifi, WifiOff, Zap, Shield, Globe, Lock, ArrowLeftRight, Rocket, Users, Coffee } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TransferState } from '@/types';
@@ -636,9 +636,9 @@ export default function P2PFileTransfer() {
               <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-6 border border-white/50 text-center dark:bg-gradient-to-r dark:from-orange-500/30 dark:to-yellow-500/30 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
                 <div className="flex items-center justify-center gap-2 mb-3">
                   <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/50 transition-all duration-500 ease-in-out">
-                    <Users className="h-6 w-6 text-orange-600 dark:text-orange-400 transition-colors duration-500 ease-in-out" />
+                    <Coffee className="h-6 w-6 text-orange-600 dark:text-orange-400 transition-colors duration-500 ease-in-out" />
                   </div>
-                  <h3 className="text-xl font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Support Our Work</h3>
+                  <h3 className="text-xl font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Buy Me a Coffee</h3>
                 </div>
                 <p className="text-black/70 mb-4 dark:text-gray-300 transition-colors duration-500 ease-in-out">
                   Love using TransmitFlow? Help us keep it free and running smoothly!
@@ -649,8 +649,8 @@ export default function P2PFileTransfer() {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 ease-in-out"
                 >
-                  <Users className="h-5 w-5" />
-                  Support Our Work
+                  <Coffee className="h-5 w-5" />
+                  Buy Me a Coffee
                 </a>
               </div>
             </div>
