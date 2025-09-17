@@ -289,7 +289,7 @@ export default function TransferProgress({
                             ) : isFileComplete ? (
                               <> • Transfer completed</>
                             ) : hasProgress && progress ? (
-                              <> • {formatFileSize(progress.bytesTransferred)} transferring</>
+                              <> • {formatFileSize(progress.bytesTransferred)} {progress.stage === 'converting' ? 'converting' : 'transferring'}</>
                             ) : null}
                           </div>
                         </div>

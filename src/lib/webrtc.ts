@@ -77,6 +77,8 @@ export class WebRTCService {
     bytesTransferred: number; 
     totalBytes: number;
     speed: number;
+    stage: 'converting' | 'transferring';
+    conversionProgress?: number;
   }) => void;
   public onTransferComplete?: () => void;
   public onTransferCancelled?: (cancelledBy: 'sender' | 'receiver') => void;
@@ -306,6 +308,7 @@ export class WebRTCService {
         bytesTransferred: Math.min(bytesTransferred, file.size),
         totalBytes: file.size,
         speed,
+        stage: 'transferring',
       });
     }
     
@@ -447,6 +450,7 @@ export class WebRTCService {
       bytesTransferred: Math.min(bytesReceived, fileInfo.metadata.size),
       totalBytes: fileInfo.metadata.size,
       speed,
+      stage: 'transferring',
     });
     
     // Send acknowledgment
@@ -545,6 +549,7 @@ export class WebRTCService {
         bytesTransferred: file.size,
         totalBytes: file.size,
         speed: 0,
+        stage: 'transferring',
       });
       
       console.log(`✅ Successfully processed ${fileName}`);

@@ -15,6 +15,8 @@ export interface FileTransferProgress {
   totalBytes: number;
   cancelled?: boolean;
   cancelledBy?: 'sender' | 'receiver';
+  stage: 'converting' | 'transferring';
+  conversionProgress?: number;
 }
 
 export interface PeerConnection {

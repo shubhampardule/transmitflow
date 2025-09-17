@@ -227,6 +227,8 @@ export default function P2PFileTransfer() {
             speed: progress.speed,
             bytesTransferred: progress.bytesTransferred,
             totalBytes: progress.totalBytes,
+            stage: progress.stage,
+            conversionProgress: progress.conversionProgress,
           } : p
         ).concat(
           prev.progress.find(p => p.fileIndex === progress.fileIndex) ? [] : [{
@@ -236,6 +238,8 @@ export default function P2PFileTransfer() {
             speed: progress.speed,
             bytesTransferred: progress.bytesTransferred,
             totalBytes: progress.totalBytes,
+            stage: progress.stage,
+            conversionProgress: progress.conversionProgress,
           }]
         )
       }));
@@ -281,7 +285,8 @@ export default function P2PFileTransfer() {
             bytesTransferred: 0,
             totalBytes: 0,
             cancelled: true,
-            cancelledBy: data.cancelledBy
+            cancelledBy: data.cancelledBy,
+            stage: 'transferring' as const,
           }
         ]
       }));
@@ -313,7 +318,8 @@ export default function P2PFileTransfer() {
           bytesTransferred: 0,
           totalBytes: file.size,
           cancelled: true,
-          cancelledBy: webrtcService.currentRole as 'sender' | 'receiver'
+          cancelledBy: webrtcService.currentRole as 'sender' | 'receiver',
+          stage: 'transferring' as const,
         }
       ]
     }));
