@@ -282,19 +282,7 @@ export default function TransferProgress({
                         <div className="flex-1 min-w-0">
                           <div className="font-medium truncate">{file.name}</div>
                           <div className="text-sm text-muted-foreground">
-                            {/* Use progress.totalBytes if file.size is 0 (for receivers) */}
                             {formatFileSize(file.size || (progress?.totalBytes || 0))}
-                            {isCancelled ? (
-                              <> • Transfer cancelled</>
-                            ) : isFileComplete ? (
-                              <> • Transfer completed</>
-                            ) : hasProgress && progress ? (
-                              progress.stage === 'converting' ? (
-                                <> • Preparing file {progress.conversionProgress ? `(${progress.conversionProgress}%)` : ''}</>
-                              ) : (
-                                <> • {formatFileSize(progress.bytesTransferred)} transferring</>
-                              )
-                            ) : null}
                           </div>
                         </div>
                       </div>
