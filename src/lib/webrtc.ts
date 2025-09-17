@@ -300,6 +300,7 @@ export class WebRTCService {
       type: MSG_TYPE.CONVERSION_PROGRESS,
       fileIndex,
       fileName: file.name,
+      fileSize: file.size,
       conversionProgress: 100,
       stage: 'transferring',
     });
@@ -396,6 +397,7 @@ export class WebRTCService {
         type: MSG_TYPE.CONVERSION_PROGRESS,
         fileIndex,
         fileName: file.name,
+        fileSize: file.size,
         conversionProgress,
         stage: 'converting',
       });
@@ -482,7 +484,10 @@ export class WebRTCService {
   }
 
   private handleConversionProgress(message: ChunkMessage): void {
-    const { fileIndex, fileName, conversionProgress, stage } = message;
+    const { fileIndex, fileName, fileSize, conversionProgress, stage } = message;
+    
+    // Use file size from message if available, otherwise try to find in expected files
+    const totalBytes = fileSize || this.expectedFiles.find(f => f.fileIndex === fileIndex)?.size || 0;
     
     // Update progress for the receiver to show sender's conversion progress
     this.onTransferProgress?.({
@@ -490,7 +495,7 @@ export class WebRTCService {
       fileIndex: fileIndex!,
       progress: conversionProgress || 0,
       bytesTransferred: 0,
-      totalBytes: 0, // We don't know the total size yet during conversion
+      totalBytes: totalBytes,
       speed: 0,
       stage: stage || 'converting',
       conversionProgress: conversionProgress,
