@@ -142,6 +142,7 @@ export class WebRTCService {
     chunks: Map<number, string | ArrayBuffer>; // Support both types
     totalChunks: number;
     receivedChunks: Set<number>;
+    bytesReceived: number; // Track actual bytes received
     startTime: number;
     complete: boolean;
     transferMethod: 'binary' | 'base64';
@@ -151,7 +152,7 @@ export class WebRTCService {
   private connectionTimeout: NodeJS.Timeout | null = null;
   
   // Binary channel handling
-  private setWaitingForChunk?: (fileIndex: number, chunkIndex: number) => void;
+  private setWaitingForChunk?: (fileIndex: number, chunkIndex: number, chunkSize: number) => void;
 
   get currentRole(): 'sender' | 'receiver' | null {
     return this.role;
@@ -319,39 +320,63 @@ export class WebRTCService {
   private setupBinaryChannelHandlers(): void {
     if (!this.binaryChannel) return;
     
-    let waitingForChunk: {
+    // Track expected chunks per file
+    const expectedChunks = new Map<number, {
       fileIndex: number;
       chunkIndex: number;
+      chunkSize: number;
       timeout: NodeJS.Timeout;
-    } | null = null;
+    }>();
     
     this.binaryChannel.onopen = () => {
       console.log('Binary channel opened');
     };
     
     this.binaryChannel.onmessage = (event) => {
-      if (waitingForChunk && event.data instanceof ArrayBuffer) {
-        clearTimeout(waitingForChunk.timeout);
-        this.handleBinaryChunk(waitingForChunk.fileIndex, waitingForChunk.chunkIndex, event.data);
-        waitingForChunk = null;
+      if (event.data instanceof ArrayBuffer) {
+        // Find the expected chunk that matches this data size
+        let matchingChunk: { fileIndex: number; chunkIndex: number; chunkSize: number; timeout: NodeJS.Timeout } | null = null;
+        
+        for (const [key, expected] of expectedChunks) {
+          if (expected.chunkSize === event.data.byteLength) {
+            matchingChunk = expected;
+            expectedChunks.delete(key);
+            clearTimeout(expected.timeout);
+            break;
+          }
+        }
+        
+        if (matchingChunk) {
+          console.log(`📦 Received binary chunk ${matchingChunk.chunkIndex} for file ${matchingChunk.fileIndex} (${event.data.byteLength} bytes)`);
+          this.handleBinaryChunk(matchingChunk.fileIndex, matchingChunk.chunkIndex, event.data);
+        } else {
+          console.error(`❌ Received unexpected binary data: ${event.data.byteLength} bytes, no matching expected chunk`);
+        }
       } else {
-        console.warn('Received unexpected binary data or no waiting chunk');
+        console.warn('Received non-ArrayBuffer data on binary channel');
       }
     };
     
-    this.setWaitingForChunk = (fileIndex: number, chunkIndex: number) => {
-      if (waitingForChunk) {
-        clearTimeout(waitingForChunk.timeout);
+    this.setWaitingForChunk = (fileIndex: number, chunkIndex: number, chunkSize: number) => {
+      // Clear any existing timeout for this chunk
+      const existing = expectedChunks.get(fileIndex * 10000 + chunkIndex);
+      if (existing) {
+        clearTimeout(existing.timeout);
       }
       
       // Use longer timeout for large files
       const timeout = setTimeout(() => {
-        console.error(`Timeout waiting for chunk ${chunkIndex} of file ${fileIndex}`);
-        waitingForChunk = null;
+        console.error(`❌ Timeout waiting for chunk ${chunkIndex} of file ${fileIndex} (${chunkSize} bytes)`);
+        expectedChunks.delete(fileIndex * 10000 + chunkIndex);
         // Don't fail the whole transfer, just log the missing chunk
       }, CONFIG.CHUNK_TIMEOUT);
       
-      waitingForChunk = { fileIndex, chunkIndex, timeout };
+      expectedChunks.set(fileIndex * 10000 + chunkIndex, { 
+        fileIndex, 
+        chunkIndex, 
+        chunkSize, 
+        timeout 
+      });
     };
   }
 
@@ -694,7 +719,7 @@ export class WebRTCService {
         break;
         
       case MSG_TYPE.FILE_CHUNK_BINARY:
-        this.setWaitingForChunk?.(message.fileIndex!, message.chunkIndex!);
+        this.setWaitingForChunk?.(message.fileIndex!, message.chunkIndex!, message.chunkSize || 0);
         break;
         
       case MSG_TYPE.FILE_CHUNK_BASE64:
@@ -743,6 +768,7 @@ export class WebRTCService {
       chunks: new Map(),
       totalChunks: totalChunks!,
       receivedChunks: new Set(),
+      bytesReceived: 0, // Initialize bytes received counter
       startTime: Date.now(),
       complete: false,
       transferMethod: (transferMethod as 'binary' | 'base64') || 'base64',
@@ -765,8 +791,9 @@ export class WebRTCService {
     
     fileInfo.chunks.set(chunkIndex, data);
     fileInfo.receivedChunks.add(chunkIndex);
+    fileInfo.bytesReceived += data.byteLength; // Track actual bytes received
     
-    console.log(`File ${fileIndex}: Received binary chunk ${chunkIndex}/${fileInfo.totalChunks - 1} (${fileInfo.receivedChunks.size}/${fileInfo.totalChunks} total)`);
+    console.log(`File ${fileIndex}: Received binary chunk ${chunkIndex}/${fileInfo.totalChunks - 1} (${data.byteLength} bytes) - Total: ${fileInfo.bytesReceived}/${fileInfo.metadata.size} bytes`);
     
     this.updateReceiveProgress(fileIndex, fileInfo);
   }
@@ -788,8 +815,12 @@ export class WebRTCService {
     fileInfo.chunks.set(chunkIndex!, data!);
     fileInfo.receivedChunks.add(chunkIndex!);
     
+    // Estimate bytes for Base64 (3/4 ratio)
+    const estimatedBytes = Math.floor((data!.length * 3) / 4);
+    fileInfo.bytesReceived += estimatedBytes;
+    
     if (fileInfo.receivedChunks.size % 10 === 0 || fileInfo.receivedChunks.size === fileInfo.totalChunks) {
-      console.log(`File ${fileIndex}: ${fileInfo.receivedChunks.size}/${fileInfo.totalChunks} Base64 chunks received`);
+      console.log(`File ${fileIndex}: ${fileInfo.receivedChunks.size}/${fileInfo.totalChunks} Base64 chunks received - Total: ${fileInfo.bytesReceived}/${fileInfo.metadata.size} bytes`);
     }
     
     this.updateReceiveProgress(fileIndex!, fileInfo);
@@ -817,20 +848,21 @@ export class WebRTCService {
     chunks: Map<number, string | ArrayBuffer>;
     totalChunks: number;
     receivedChunks: Set<number>;
+    bytesReceived: number;
     startTime: number;
     complete: boolean;
     transferMethod: 'binary' | 'base64';
   }): void {
-    const progress = (fileInfo.receivedChunks.size / fileInfo.totalChunks) * 100;
-    const bytesReceived = fileInfo.receivedChunks.size * this.chunkSize;
+    // Use actual bytes received instead of estimated chunk size
+    const progress = (fileInfo.bytesReceived / fileInfo.metadata.size) * 100;
     const elapsed = (Date.now() - fileInfo.startTime) / 1000;
-    const speed = elapsed > 0 ? bytesReceived / elapsed : 0;
+    const speed = elapsed > 0 ? fileInfo.bytesReceived / elapsed : 0;
     
     this.onTransferProgress?.({
       fileName: fileInfo.metadata.name,
       fileIndex,
-      progress,
-      bytesTransferred: Math.min(bytesReceived, fileInfo.metadata.size),
+      progress: Math.min(progress, 100), // Cap at 100%
+      bytesTransferred: fileInfo.bytesReceived,
       totalBytes: fileInfo.metadata.size,
       speed,
       stage: 'transferring',
@@ -846,6 +878,13 @@ export class WebRTCService {
       return;
     }
     
+    console.log(`🔍 File completion check for ${fileName}:`);
+    console.log(`  - Expected size: ${fileInfo.metadata.size} bytes`);
+    console.log(`  - Received bytes: ${fileInfo.bytesReceived} bytes`);
+    console.log(`  - Total chunks expected: ${fileInfo.totalChunks}`);
+    console.log(`  - Chunks received: ${fileInfo.receivedChunks.size}`);
+    console.log(`  - Transfer method: ${fileInfo.transferMethod}`);
+    
     // Validate that all chunks are received
     const missingChunks: number[] = [];
     for (let i = 0; i < fileInfo.totalChunks; i++) {
@@ -856,6 +895,7 @@ export class WebRTCService {
     
     if (missingChunks.length > 0) {
       console.error(`❌ File incomplete: ${fileName} (missing ${missingChunks.length} chunks: ${missingChunks.slice(0, 10).join(', ')}${missingChunks.length > 10 ? '...' : ''})`);
+      console.error(`  - Missing chunks represent ~${((missingChunks.length / fileInfo.totalChunks) * 100).toFixed(2)}% of the file`);
       
       // For large files, be more lenient with a few missing chunks at the end
       const fileSize = fileInfo.metadata.size;
@@ -863,15 +903,16 @@ export class WebRTCService {
       const missingPercentage = (missingChunks.length / fileInfo.totalChunks) * 100;
       
       if (isLargeFile && missingPercentage < 1) {
-        console.warn(`Large file ${fileName} missing ${missingPercentage.toFixed(2)}% chunks, attempting reconstruction anyway`);
+        console.warn(`⚠️ Large file ${fileName} missing ${missingPercentage.toFixed(2)}% chunks, attempting reconstruction anyway`);
         // Continue with reconstruction for large files with minimal missing chunks
       } else {
+        console.error(`❌ Too many missing chunks (${missingPercentage.toFixed(2)}%), aborting reconstruction`);
         this.onError?.(`Transfer incomplete: ${fileName} (missing ${missingChunks.length} chunks)`);
         return;
       }
+    } else {
+      console.log(`✅ All chunks received for ${fileName}, proceeding with reconstruction`);
     }
-    
-    console.log(`All chunks received for ${fileName}, reconstructing file...`);
     
     try {
       let file: File;
