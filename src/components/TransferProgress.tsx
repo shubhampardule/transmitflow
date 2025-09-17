@@ -194,8 +194,8 @@ export default function TransferProgress({
       {/* Room Code - Only show during initial connection phase */}
       {(transferState.status === 'idle' || transferState.status === 'connecting') && (
         <Card>
-          <CardContent className="py-6">
-            <div className="flex items-center justify-between h-16">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between h-12">
               <div className="flex flex-col justify-center h-full">
                 <h3 className="font-medium">Room Code</h3>
                 <p className="text-2xl font-mono font-bold tracking-wider">{roomCode}</p>
@@ -240,8 +240,8 @@ export default function TransferProgress({
 
       {/* Status */}
       <Card>
-        <CardContent className="py-6">
-          <div className="flex items-center gap-4 h-16">
+        <CardContent className="py-4">
+          <div className="flex items-center gap-4 h-12">
             {statusInfo.icon}
             <div className="flex-1 flex flex-col justify-center h-full">
               <h3 className="font-medium text-lg">{statusInfo.title}</h3>
