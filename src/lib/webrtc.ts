@@ -14,15 +14,14 @@ const isMobileDevice = () => {
 
 // Adaptive configuration based on sender device
 const CONFIG = {
-  // PC senders (to mobile): Use binary for speed
-  BINARY_CHUNK_SIZE_SMALL: 32 * 1024,    // 32KB for large files
-  BINARY_CHUNK_SIZE_NORMAL: 128 * 1024,  // 128KB for normal files
-  BINARY_BUFFER_THRESHOLD: 512 * 1024,   // 512KB buffer
+  // Mobile senders (to PC): Use binary for speed - no slow conversion on mobile CPU
+  BINARY_CHUNK_SIZE_SMALL: 32 * 1024,          // 32KB for large files on mobile
+  BINARY_CHUNK_SIZE_NORMAL: 128 * 1024,        // 128KB for normal files on mobile
+  BINARY_BUFFER_THRESHOLD: 512 * 1024,         // 512KB buffer for mobile
   
-  // Mobile senders (to PC): Use Base64 for reliability
-  BASE64_CHUNK_SIZE: 64 * 1024,                    // 64KB for normal files
-  BASE64_CHUNK_SIZE_MOBILE_SMALL: 32 * 1024,       // 32KB for large files on mobile
-  BASE64_BUFFER_THRESHOLD: 256 * 1024,             // 256KB buffer
+  // PC senders (to mobile): Use Base64 - PC handles the heavy conversion work
+  BASE64_CHUNK_SIZE: 64 * 1024,                // 64KB Base64 chunks
+  BASE64_BUFFER_THRESHOLD: 256 * 1024,         // 256KB buffer for Base64
   
   // File size thresholds
   LARGE_FILE_THRESHOLD: 5 * 1024 * 1024, // 5MB threshold for chunk size adjustment
@@ -165,29 +164,29 @@ export class WebRTCService {
     
     // Detect if sender is mobile to choose transfer method
     this.senderIsMobile = isMobileDevice();
-    // REVERSED: Base64 for mobile senders (more reliable), binary for PC senders (faster)
-    this.transferMethod = this.senderIsMobile ? 'base64' : 'binary';
+    // CORRECT: Binary for mobile senders (fast, no conversion), Base64 for PC senders (PC handles conversion)
+    this.transferMethod = this.senderIsMobile ? 'binary' : 'base64';
     
     if (this.transferMethod === 'binary') {
-      // PC sender: Use binary for speed
-      this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_NORMAL;
-      this.bufferThreshold = CONFIG.BINARY_BUFFER_THRESHOLD;
-      console.log('🖥️ PC sender: Using binary transfer for maximum speed');
-    } else {
-      // Mobile sender: Use Base64 for reliability with optimized chunk sizes
+      // Mobile sender: Use binary for speed (no slow conversion on mobile processor)
       const totalFileSize = files.reduce((sum, file) => sum + file.size, 0);
       const hasLargeFiles = files.some(file => file.size > CONFIG.LARGE_FILE_THRESHOLD);
       
       if (hasLargeFiles || totalFileSize > CONFIG.LARGE_FILE_THRESHOLD) {
-        // Use smaller chunks for large files on mobile
-        this.chunkSize = CONFIG.BASE64_CHUNK_SIZE_MOBILE_SMALL;
-        console.log('📱 Mobile with large files: Using small Base64 chunks for memory efficiency');
+        // Use smaller chunks for large files on mobile to manage memory
+        this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_SMALL;
+        console.log('📱 Mobile with large files: Using small binary chunks (32KB) for memory efficiency');
       } else {
-        this.chunkSize = CONFIG.BASE64_CHUNK_SIZE;
-        console.log('📱 Mobile with small files: Using normal Base64 chunks');
+        this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_NORMAL;
+        console.log('📱 Mobile with small files: Using normal binary chunks (128KB)');
       }
+      this.bufferThreshold = CONFIG.BINARY_BUFFER_THRESHOLD;
+      console.log('📱 Mobile sender: Using BINARY transfer (fast, no conversion needed)');
+    } else {
+      // PC sender: Use Base64 (PC handles the heavy conversion work)
+      this.chunkSize = CONFIG.BASE64_CHUNK_SIZE;
       this.bufferThreshold = CONFIG.BASE64_BUFFER_THRESHOLD;
-      console.log('📱 Mobile sender: Using Base64 transfer for maximum reliability');
+      console.log('🖥️ PC sender: Using Base64 transfer (PC handles conversion)');
     }
     
     this.onStatusMessage?.('Preparing to send files...');
