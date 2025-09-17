@@ -21,6 +21,7 @@ const MSG_TYPE = {
   CHUNK_ACK: 'CHUNK_ACK',
   TRANSFER_COMPLETE: 'TRANSFER_COMPLETE',
   CONVERSION_PROGRESS: 'CONVERSION_PROGRESS',
+  FILE_CANCEL: 'FILE_CANCEL',
   CANCEL: 'CANCEL',
   ERROR: 'ERROR',
 };
@@ -39,6 +40,7 @@ interface ChunkMessage {
   message?: string;
   conversionProgress?: number;
   stage?: 'converting' | 'transferring';
+  cancelledBy?: 'sender' | 'receiver';
 }
 
 export class WebRTCService {
@@ -99,6 +101,7 @@ export class WebRTCService {
     startTime: number;
   }>();
   private isSending = false;
+  private cancelledFiles = new Set<number>(); // Track cancelled file indices
   
   // Receiver state - SIMPLIFIED WITH PROPER TRACKING
   private receivedFiles = new Map<number, {
@@ -267,6 +270,12 @@ export class WebRTCService {
     const file = this.filesToSend[fileIndex];
     if (!file) return;
     
+    // Check if file was cancelled before starting
+    if (this.cancelledFiles.has(fileIndex)) {
+      console.log(`Skipping cancelled file ${fileIndex}: ${file.name}`);
+      return;
+    }
+    
     console.log(`Sending file ${fileIndex}: ${file.name} (${file.size} bytes)`);
     
     // Show conversion start
@@ -376,6 +385,12 @@ export class WebRTCService {
     const totalChunks = Math.ceil(file.size / CONFIG.CHUNK_SIZE);
     
     for (let offset = 0; offset < file.size; offset += CONFIG.CHUNK_SIZE) {
+      // Check if file was cancelled during conversion
+      if (this.cancelledFiles.has(fileIndex)) {
+        console.log(`File ${fileIndex} cancelled during conversion, stopping`);
+        return []; // Return empty array to stop processing
+      }
+      
       const slice = file.slice(offset, Math.min(offset + CONFIG.CHUNK_SIZE, file.size));
       const chunkIndex = chunks.length;
       
@@ -441,6 +456,10 @@ export class WebRTCService {
         this.handleConversionProgress(message);
         break;
         
+      case MSG_TYPE.FILE_CANCEL:
+        this.handleFileCancel(message);
+        break;
+        
       case MSG_TYPE.TRANSFER_COMPLETE:
         this.onTransferComplete?.();
         this.onStatusMessage?.('All files received successfully!');
@@ -500,6 +519,27 @@ export class WebRTCService {
       stage: stage || 'converting',
       conversionProgress: conversionProgress,
     });
+  }
+
+  private handleFileCancel(message: ChunkMessage): void {
+    const { fileIndex, fileName, cancelledBy } = message;
+    
+    if (fileIndex !== undefined) {
+      // Add to cancelled files set
+      this.cancelledFiles.add(fileIndex);
+      
+      // Remove from received files if it exists
+      this.receivedFiles.delete(fileIndex);
+      
+      // Trigger the file cancelled callback
+      this.onFileCancelled?.({
+        fileIndex,
+        fileName: fileName!,
+        cancelledBy: cancelledBy!,
+      });
+      
+      console.log(`File ${fileIndex} (${fileName}) cancelled by ${cancelledBy}`);
+    }
   }
 
   private handleFileChunk(message: ChunkMessage): void {
@@ -771,9 +811,22 @@ export class WebRTCService {
   }
 
   cancelFile(fileIndex: number, fileName: string): void {
-    // Not implementing individual file cancellation in this simplified version
-    // for maximum reliability
-    console.log(`Cancel requested for ${fileName}, but continuing for reliability`);
+    // Add to cancelled files set
+    this.cancelledFiles.add(fileIndex);
+    
+    // Send cancellation message to peer
+    this.sendMessage({
+      type: MSG_TYPE.FILE_CANCEL,
+      fileIndex,
+      fileName,
+      cancelledBy: this.role as 'sender' | 'receiver',
+    });
+    
+    // Remove from send progress if it exists
+    this.sendProgressMap.delete(fileIndex);
+    this.sendChunksMap.delete(fileIndex);
+    
+    console.log(`Cancelled file ${fileIndex} (${fileName})`);
   }
 }
 
