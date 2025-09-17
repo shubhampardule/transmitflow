@@ -79,6 +79,8 @@ export class WebRTCService {
     speed: number;
   }) => void;
   public onTransferComplete?: () => void;
+  public onTransferCancelled?: (cancelledBy: 'sender' | 'receiver') => void;
+  public onFileCancelled?: (data: { fileIndex: number; fileName: string; cancelledBy: 'sender' | 'receiver' }) => void;
   public onError?: (error: string) => void;
   public onStatusMessage?: (message: string) => void;
   
