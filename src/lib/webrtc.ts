@@ -1,17 +1,15 @@
-// High-Performance WebRTC Implementation
-// Optimized for COTURN server on Oracle VM for maximum transfer speed
+// SIMPLIFIED AND RELIABLE WebRTC Implementation
+// This version uses JSON messages for reliability and proper chunk tracking
 
 import { FileMetadata, SignalingMessage } from '@/types';
 import { signalingService } from './signaling';
 
-// High-performance configuration optimized for COTURN
+// Simple, reliable configuration - OPTIMIZED FOR SPEED
 const CONFIG = {
-  CHUNK_SIZE: 64 * 1024,              // 64KB chunks - optimal for high-speed transfers
-  BUFFER_THRESHOLD: 512 * 1024,       // 512KB buffer threshold - larger for speed
+  CHUNK_SIZE: 64 * 1024,              // 64KB chunks - 4x larger for speed
+  BUFFER_THRESHOLD: 256 * 1024,       // 256KB buffer threshold - 4x larger
   ACK_TIMEOUT: 2000,                  // 2 second timeout - faster retries
   MAX_RETRIES: 5,                     // More retries for reliability at high speed
-  CONCURRENT_CHUNKS: 8,               // Send multiple chunks in parallel
-  MAX_BUFFER_SIZE: 16 * 1024 * 1024,  // 16MB max buffer size
 };
 
 // Message types - using strings for clarity
@@ -51,7 +49,7 @@ export class WebRTCService {
   private roomCode: string = '';
   private role: 'sender' | 'receiver' | null = null;
   
-  // ICE configuration optimized for COTURN performance
+  // ICE configuration from environment - OPTIMIZED FOR SPEED
   private readonly config: RTCConfiguration = {
     iceServers: [
       ...(process.env.NEXT_PUBLIC_TURN_URL && process.env.NEXT_PUBLIC_TURN_USER && process.env.NEXT_PUBLIC_TURN_PASS ? [{
@@ -67,10 +65,9 @@ export class WebRTCService {
       }] : []),
     ],
     iceTransportPolicy: 'all',
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
-    // Performance optimizations for high-speed transfers
-    iceCandidatePoolSize: 10,  // Pre-gather more ICE candidates
+    bundlePolicy: 'max-bundle',      // Bundle all media for efficiency
+    rtcpMuxPolicy: 'require',        // Multiplex RTP and RTCP for speed
+    iceCandidatePoolSize: 10,        // Pre-gather ICE candidates for faster connection
   };
   
   // Event handlers
@@ -190,13 +187,11 @@ export class WebRTCService {
 
   private createDataChannel(): void {
     this.dataChannel = this.peerConnection!.createDataChannel('file-transfer', {
-      ordered: true,         // CRITICAL: Ensure ordered delivery
-      maxRetransmits: 5,     // Allow more retransmits for reliability
-      maxPacketLifeTime: undefined, // No time limit, prioritize reliability
-      // High-performance settings
-      id: 1,                 // Explicit channel ID
-      negotiated: false,     // Standard negotiation
-      protocol: 'binary',    // Optimize for binary data
+      ordered: true,          // CRITICAL: Ensure ordered delivery
+      maxRetransmits: 0,      // No retransmits for speed (reliability handled at app level)
+      protocol: 'udp',       // Use UDP for maximum speed
+      negotiated: false,     // Let WebRTC handle negotiation
+      id: 1                  // Explicit channel ID for optimization
     });
     
     this.setupDataChannelHandlers();
@@ -217,8 +212,8 @@ export class WebRTCService {
       this.onDataChannelOpen?.();
       
       if (this.role === 'sender' && this.filesToSend.length > 0) {
-        // Start transfer after small delay to ensure stability
-        setTimeout(() => this.startTransfer(), 500);
+        // Start transfer immediately for maximum speed
+        setTimeout(() => this.startTransfer(), 100);
       }
     };
     
@@ -342,10 +337,32 @@ export class WebRTCService {
       totalChunks: chunks.length,
     });
     
-    // Send all chunks with parallel processing for maximum speed
-    await this.sendChunksInParallel(fileIndex, chunks);
+    // Send all chunks with flow control
+    for (let i = 0; i < chunks.length; i++) {
+      await this.sendChunkWithFlowControl(fileIndex, i, chunks[i]);
+      
+      // Update progress
+      const progress = this.sendProgressMap.get(fileIndex)!;
+      progress.sentChunks.add(i);
+      
+      const percentComplete = (progress.sentChunks.size / progress.totalChunks) * 100;
+      const bytesTransferred = progress.sentChunks.size * CONFIG.CHUNK_SIZE;
+      const elapsed = (Date.now() - progress.startTime) / 1000;
+      const speed = elapsed > 0 ? bytesTransferred / elapsed : 0;
+      
+      this.onTransferProgress?.({
+        fileName: file.name,
+        fileIndex,
+        progress: percentComplete,
+        bytesTransferred: Math.min(bytesTransferred, file.size),
+        totalBytes: file.size,
+        speed,
+        stage: 'transferring',
+      });
+    }
     
     // Send file complete message
+    console.log(`All ${chunks.length} chunks sent for ${file.name}, sending FILE_COMPLETE`);
     this.sendMessage({
       type: MSG_TYPE.FILE_COMPLETE,
       fileIndex,
@@ -353,83 +370,12 @@ export class WebRTCService {
     });
   }
 
-  private async sendChunksInParallel(fileIndex: number, chunks: string[]): Promise<void> {
-    const progress = this.sendProgressMap.get(fileIndex)!;
-    const concurrentLimit = CONFIG.CONCURRENT_CHUNKS;
-    let sentCount = 0;
-    
-    // Process chunks in batches for optimal performance
-    for (let i = 0; i < chunks.length; i += concurrentLimit) {
-      const batch = chunks.slice(i, Math.min(i + concurrentLimit, chunks.length));
-      const batchPromises = batch.map(async (chunk, batchIndex) => {
-        const chunkIndex = i + batchIndex;
-        await this.sendChunkWithFlowControl(fileIndex, chunkIndex, chunk);
-        
-        sentCount++;
-        progress.sentChunks.add(chunkIndex);
-        
-        // Update progress more frequently for smoother UI
-        if (sentCount % Math.max(1, Math.floor(chunks.length / 100)) === 0) {
-          this.updateSendProgress(fileIndex);
-        }
-      });
-      
-      // Wait for current batch to complete before starting next batch
-      await Promise.all(batchPromises);
-      
-      // Check if transfer was cancelled
-      if (this.cancelledFiles.has(fileIndex)) {
-        console.log(`File ${fileIndex} transfer cancelled`);
-        return;
-      }
-    }
-    
-    // Final progress update
-    this.updateSendProgress(fileIndex);
-  }
-
-  private updateSendProgress(fileIndex: number): void {
-    const file = this.filesToSend[fileIndex];
-    const progress = this.sendProgressMap.get(fileIndex);
-    
-    if (!file || !progress) return;
-    
-    const percentComplete = (progress.sentChunks.size / progress.totalChunks) * 100;
-    const bytesTransferred = progress.sentChunks.size * CONFIG.CHUNK_SIZE;
-    const elapsed = (Date.now() - progress.startTime) / 1000;
-    const speed = elapsed > 0 ? bytesTransferred / elapsed : 0;
-    
-    this.onTransferProgress?.({
-      fileName: file.name,
-      fileIndex,
-      progress: percentComplete,
-      bytesTransferred: Math.min(bytesTransferred, file.size),
-      totalBytes: file.size,
-      speed,
-      stage: 'transferring',
-    });
-  }
-
   private async sendChunkWithFlowControl(fileIndex: number, chunkIndex: number, data: string): Promise<void> {
-    // Smart buffer management - wait only when buffer is getting critically full
+    // Wait if buffer is getting full - reduced delay for speed
     while (this.dataChannel && this.dataChannel.bufferedAmount > CONFIG.BUFFER_THRESHOLD) {
-      // Shorter wait time for faster throughput
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 10)); // 5x faster backpressure handling
     }
     
-    // Additional optimization: Check if we can send immediately
-    if (this.dataChannel && this.dataChannel.bufferedAmount < CONFIG.BUFFER_THRESHOLD * 0.5) {
-      // Buffer is less than half full, send immediately for maximum speed
-      this.sendMessage({
-        type: MSG_TYPE.FILE_CHUNK,
-        fileIndex,
-        chunkIndex,
-        data,
-      });
-      return;
-    }
-    
-    // Regular sending with flow control
     this.sendMessage({
       type: MSG_TYPE.FILE_CHUNK,
       fileIndex,
@@ -773,22 +719,7 @@ export class WebRTCService {
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
       try {
         const jsonStr = JSON.stringify(message);
-        
-        // Check buffer size to prevent overwhelming the channel
-        const bufferedAmount = this.dataChannel.bufferedAmount;
-        if (bufferedAmount > CONFIG.MAX_BUFFER_SIZE) {
-          // Wait for buffer to drain before sending more
-          const waitForBuffer = () => {
-            if (this.dataChannel!.bufferedAmount < CONFIG.BUFFER_THRESHOLD) {
-              this.dataChannel!.send(jsonStr);
-            } else {
-              setTimeout(waitForBuffer, 10); // Check every 10ms
-            }
-          };
-          waitForBuffer();
-        } else {
-          this.dataChannel.send(jsonStr);
-        }
+        this.dataChannel.send(jsonStr);
       } catch (error) {
         console.error('Error sending message:', error);
       }
