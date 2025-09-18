@@ -352,10 +352,59 @@ export class WebRTCService {
     
     this.dataChannel.onmessage = async (event) => {
       try {
-        const message: ControlMessage = JSON.parse(event.data);
-        await this.handleControlMessage(message);
+        // Check if this is an optimized Base64 chunk (starts with fileIndex:chunkIndex:length|)
+        const data = event.data;
+        if (typeof data === 'string') {
+          if (/^\d+:\d+:\d+\|/.test(data)) {
+            // Parse optimized Base64 chunk format: "fileIndex:chunkIndex:length|base64data"
+            const pipeIndex = data.indexOf('|');
+            const header = data.substring(0, pipeIndex);
+            const base64Data = data.substring(pipeIndex + 1);
+            
+            const [fileIndex, chunkIndex] = header.split(':').map(Number);
+            
+            console.log(`📥 Received optimized Base64 chunk ${chunkIndex} for file ${fileIndex} (${base64Data.length} chars)`);
+            
+            // Convert to standard message format for existing handler
+            const message: ControlMessage = {
+              type: MSG_TYPE.FILE_CHUNK_BASE64,
+              fileIndex,
+              chunkIndex,
+              data: base64Data,
+            };
+            
+            this.handleBase64Chunk(message);
+          } else if (data.startsWith('CONV:')) {
+            // Parse compact conversion progress: "CONV:fileIndex:progress"
+            const parts = data.split(':');
+            if (parts.length === 3) {
+              const fileIndex = parseInt(parts[1]);
+              const conversionProgress = parseInt(parts[2]);
+              
+              console.log(`📥 Received compact conversion progress: ${conversionProgress}% for file ${fileIndex}`);
+              
+              // Convert to standard message format for existing handler
+              const message: ControlMessage = {
+                type: MSG_TYPE.CONVERSION_PROGRESS,
+                fileIndex,
+                conversionProgress,
+                stage: 'converting',
+                fileName: this.expectedFiles[fileIndex]?.name || `File ${fileIndex}`,
+              };
+              
+              this.handleConversionProgress(message);
+            }
+          } else {
+            // Standard JSON message format
+            const message: ControlMessage = JSON.parse(data);
+            await this.handleControlMessage(message);
+          }
+        } else {
+          // Handle non-string data (shouldn't happen on data channel)
+          console.warn('Received non-string data on data channel:', data);
+        }
       } catch (error) {
-        console.error('Error handling control message:', error);
+        console.error('Error handling data channel message:', error);
       }
     };
   }
@@ -377,23 +426,38 @@ export class WebRTCService {
     
     this.binaryChannel.onmessage = (event) => {
       if (event.data instanceof ArrayBuffer) {
-        // Find the expected chunk that matches this data size
-        let matchingChunk: { fileIndex: number; chunkIndex: number; chunkSize: number; timeout: NodeJS.Timeout } | null = null;
+        const data = event.data;
         
-        for (const [key, expected] of expectedChunks) {
-          if (expected.chunkSize === event.data.byteLength) {
-            matchingChunk = expected;
-            expectedChunks.delete(key);
-            clearTimeout(expected.timeout);
-            break;
-          }
-        }
-        
-        if (matchingChunk) {
-          console.log(`📦 Received binary chunk ${matchingChunk.chunkIndex} for file ${matchingChunk.fileIndex} (${event.data.byteLength} bytes)`);
-          this.handleBinaryChunk(matchingChunk.fileIndex, matchingChunk.chunkIndex, event.data);
+        // Check if this is optimized format with embedded metadata (8-byte header)
+        if (data.byteLength >= 8) {
+          const headerView = new Uint32Array(data.slice(0, 8));
+          const fileIndex = headerView[0];
+          const chunkIndex = headerView[1];
+          
+          // Extract actual chunk data (everything after 8-byte header)
+          const chunkData = data.slice(8);
+          
+          console.log(`📦 Received optimized binary chunk ${chunkIndex} for file ${fileIndex} (${chunkData.byteLength} bytes + 8 byte header)`);
+          this.handleBinaryChunk(fileIndex, chunkIndex, chunkData);
         } else {
-          console.error(`❌ Received unexpected binary data: ${event.data.byteLength} bytes, no matching expected chunk`);
+          // Legacy format - try to match with expected chunks
+          let matchingChunk: { fileIndex: number; chunkIndex: number; chunkSize: number; timeout: NodeJS.Timeout } | null = null;
+          
+          for (const [key, expected] of expectedChunks) {
+            if (expected.chunkSize === data.byteLength) {
+              matchingChunk = expected;
+              expectedChunks.delete(key);
+              clearTimeout(expected.timeout);
+              break;
+            }
+          }
+          
+          if (matchingChunk) {
+            console.log(`📦 Received legacy binary chunk ${matchingChunk.chunkIndex} for file ${matchingChunk.fileIndex} (${data.byteLength} bytes)`);
+            this.handleBinaryChunk(matchingChunk.fileIndex, matchingChunk.chunkIndex, data);
+          } else {
+            console.error(`❌ Received unexpected binary data: ${data.byteLength} bytes, no matching expected chunk`);
+          }
         }
       } else {
         console.warn('Received non-ArrayBuffer data on binary channel');
@@ -509,29 +573,35 @@ export class WebRTCService {
         await new Promise(resolve => setTimeout(resolve, 10));
       }
       
-      // Send control message first
-      this.sendControlMessage({
-        type: MSG_TYPE.FILE_CHUNK_BINARY,
-        fileIndex,
-        chunkIndex,
-        chunkSize: arrayBuffer.byteLength,
-      });
+      // OPTIMIZATION: Embed metadata in binary data to eliminate dual-channel overhead
+      // Format: 8-byte header [fileIndex:4 + chunkIndex:4] + actual data
+      const header = new ArrayBuffer(8);
+      const headerView = new Uint32Array(header);
+      headerView[0] = fileIndex;
+      headerView[1] = chunkIndex;
       
-      // Minimal delay for control message - optimized for speed
-      await new Promise(resolve => setTimeout(resolve, 2));
+      // Combine header with chunk data
+      const combinedData = new ArrayBuffer(header.byteLength + arrayBuffer.byteLength);
+      const combinedView = new Uint8Array(combinedData);
+      combinedView.set(new Uint8Array(header), 0);
+      combinedView.set(new Uint8Array(arrayBuffer), header.byteLength);
       
       try {
-        // Then send binary data
-        this.binaryChannel!.send(arrayBuffer);
-        console.log(`Sent binary chunk ${chunkIndex}/${totalChunks - 1} for ${file.name} (${arrayBuffer.byteLength} bytes)`);
+        // Send single message with embedded metadata - no control channel needed!
+        this.binaryChannel!.send(combinedData);
+        console.log(`Sent optimized binary chunk ${chunkIndex}/${totalChunks - 1} for ${file.name} (${arrayBuffer.byteLength} bytes + 8 byte header)`);
       } catch (error) {
-        console.error(`Failed to send chunk ${chunkIndex}:`, error);
-        // Try smaller chunks if we hit memory issues
-        if (this.chunkSize > CONFIG.BINARY_CHUNK_SIZE_SMALL) {
-          console.log('Reducing chunk size due to memory issues');
-          this.chunkSize = CONFIG.BINARY_CHUNK_SIZE_SMALL;
-        }
-        throw error;
+        console.error(`Failed to send optimized chunk ${chunkIndex}:`, error);
+        // Fallback to dual-channel method
+        this.sendControlMessage({
+          type: MSG_TYPE.FILE_CHUNK_BINARY,
+          fileIndex,
+          chunkIndex,
+          chunkSize: arrayBuffer.byteLength,
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, 2));
+        this.binaryChannel!.send(arrayBuffer);
       }
       
       offset += chunkSize;
@@ -628,7 +698,12 @@ export class WebRTCService {
       const percentComplete = (progress.sentChunks.size / progress.totalChunks) * 100;
       const bytesTransferred = progress.sentChunks.size * this.chunkSize;
       const elapsed = (Date.now() - progress.startTime) / 1000;
-      const speed = elapsed > 0 ? bytesTransferred / elapsed : 0;
+      
+      // Calculate actual network usage including Base64 overhead and headers
+      const base64Overhead = bytesTransferred * 0.33; // Base64 encoding overhead
+      const headerOverhead = progress.sentChunks.size * 15; // Compact header size per chunk
+      const actualNetworkBytes = bytesTransferred + base64Overhead + headerOverhead;
+      const speed = elapsed > 0 ? actualNetworkBytes / elapsed : 0;
       
       this.onTransferProgress?.({
         fileName: file.name,
@@ -636,7 +711,7 @@ export class WebRTCService {
         progress: percentComplete,
         bytesTransferred: Math.min(bytesTransferred, file.size),
         totalBytes: file.size,
-        speed,
+        speed, // Now reflects actual network usage
         stage: 'transferring',
       });
     }
@@ -668,12 +743,14 @@ export class WebRTCService {
       }
     }
     
-    this.sendControlMessage({
-      type: MSG_TYPE.FILE_CHUNK_BASE64,
-      fileIndex,
-      chunkIndex,
-      data,
-    });
+    // OPTIMIZATION: Send compact chunk header + raw Base64 data to reduce overhead
+    // Instead of large JSON message, send minimal header then raw data
+    const chunkHeader = `${fileIndex}:${chunkIndex}:${data.length}|`;
+    const compactMessage = chunkHeader + data;
+    
+    // Always use optimized format - no fallback to avoid dual transmission
+    this.dataChannel!.send(compactMessage);
+    console.log(`Sent optimized Base64 chunk ${chunkIndex} for file ${fileIndex} (${data.length} chars, header: ${chunkHeader.length} chars)`);
   }
 
   private async fileToChunks(file: File, fileIndex: number): Promise<string[]> {
@@ -733,19 +810,27 @@ export class WebRTCService {
       );
       
       if (shouldSendProgress && this.dataChannel?.readyState === 'open') {
-        const progressMessage = {
-          type: MSG_TYPE.CONVERSION_PROGRESS,
-          fileIndex,
-          fileName: file.name,
-          conversionProgress,
-          stage: 'converting' as const,
-        };
+        // OPTIMIZATION: Use compact format for conversion progress: "CONV:fileIndex:progress"
+        const compactProgress = `CONV:${fileIndex}:${conversionProgress}`;
         
         try {
-          this.dataChannel.send(JSON.stringify(progressMessage));
-          console.log(`📤 ✅ Throttled conversion progress sent: ${conversionProgress}% for ${file.name}`);
+          this.dataChannel.send(compactProgress);
+          console.log(`📤 ✅ Compact conversion progress sent: ${conversionProgress}% for file ${fileIndex}`);
         } catch (error) {
           console.error(`📤 ❌ Failed to send conversion progress:`, error);
+          // Fallback to full JSON message if compact fails
+          const progressMessage = {
+            type: MSG_TYPE.CONVERSION_PROGRESS,
+            fileIndex,
+            fileName: file.name,
+            conversionProgress,
+            stage: 'converting' as const,
+          };
+          try {
+            this.dataChannel.send(JSON.stringify(progressMessage));
+          } catch (fallbackError) {
+            console.error(`📤 ❌ Fallback progress message also failed:`, fallbackError);
+          }
         }
       } else if (!shouldSendProgress) {
         // Silent - don't log every skipped message to reduce console spam
@@ -796,7 +881,23 @@ export class WebRTCService {
     
     if (now - progress.lastProgressUpdate > CONFIG.PROGRESS_UPDATE_INTERVAL) {
       const elapsed = (now - progress.startTime) / 1000;
-      const speed = elapsed > 0 ? bytesSent / elapsed : 0;
+      
+      // Calculate actual network usage including overhead
+      let actualNetworkBytes = bytesSent;
+      
+      if (this.transferMethod === 'binary') {
+        // Binary mode: 8-byte header per chunk + file data
+        const numChunks = Math.ceil(bytesSent / this.chunkSize);
+        actualNetworkBytes = bytesSent + (numChunks * 8); // Add header overhead
+      } else {
+        // Base64 mode: ~33% Base64 encoding overhead + compact headers
+        const base64Overhead = bytesSent * 0.33; // Base64 encoding overhead
+        const numChunks = Math.ceil(bytesSent / this.chunkSize);
+        const headerOverhead = numChunks * 15; // Approximate compact header size
+        actualNetworkBytes = bytesSent + base64Overhead + headerOverhead;
+      }
+      
+      const speed = elapsed > 0 ? actualNetworkBytes / elapsed : 0;
       
       this.onTransferProgress?.({
         fileName: this.filesToSend[fileIndex].name,
@@ -804,7 +905,7 @@ export class WebRTCService {
         progress: (bytesSent / totalBytes) * 100,
         bytesTransferred: bytesSent,
         totalBytes,
-        speed,
+        speed, // Now reflects actual network usage
         stage: 'transferring',
         conversionProgress: undefined,
       });
