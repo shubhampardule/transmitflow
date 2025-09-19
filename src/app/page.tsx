@@ -11,7 +11,7 @@ export default function Home() {
     <div className="min-h-screen w-full bg-white">
       {/* Content */}
       <div className="relative">
-          <Suspense fallback={<LoadingSpinner size={64} />}>
+          <Suspense fallback={<LoadingSpinner />}>
             <P2PFileTransfer />
           </Suspense>
         <Toaster position="top-right" richColors />
