@@ -22,6 +22,8 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
   
   const [roomCode, setRoomCode] = useState(receiveCode || '');
   const [showScanner, setShowScanner] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [scannedCode, setScannedCode] = useState('');
   const [hasAutoConnected, setHasAutoConnected] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -60,8 +62,9 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
         // Not a URL, use as direct code
       }
       
-      setRoomCode(code.toUpperCase());
+      setScannedCode(code.toUpperCase());
       setShowScanner(false);
+      setShowConnectModal(true);
     }
   }, []);
 
@@ -78,10 +81,20 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
     setRoomCode(formatted);
   };
 
+  const handleConnectConfirm = () => {
+    setShowConnectModal(false);
+    onReceiveFiles(scannedCode);
+  };
+
+  const handleConnectCancel = () => {
+    setShowConnectModal(false);
+    setScannedCode('');
+  };
+
   if (showScanner) {
     return (
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-4 md:p-6">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Scan QR Code</h3>
@@ -94,7 +107,8 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
               </Button>
             </div>
             
-            <div className="relative aspect-square max-w-sm mx-auto rounded-lg overflow-hidden bg-black">
+            {/* Mobile-optimized scanner size */}
+            <div className="relative aspect-square w-full max-w-xs md:max-w-sm mx-auto rounded-lg overflow-hidden bg-black">
               <Scanner
                 onScan={handleScanSuccess}
                 onError={handleScanError}
@@ -104,16 +118,16 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
                 }}
               />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-48 h-48 border-2 border-white rounded-lg relative">
-                  <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-blue-500 rounded-tl-lg"></div>
-                  <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-blue-500 rounded-tr-lg"></div>
-                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-blue-500 rounded-bl-lg"></div>
-                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-blue-500 rounded-br-lg"></div>
+                <div className="w-32 h-32 md:w-48 md:h-48 border-2 border-white rounded-lg relative">
+                  <div className="absolute top-0 left-0 w-4 h-4 md:w-6 md:h-6 border-t-4 border-l-4 border-blue-500 rounded-tl-lg"></div>
+                  <div className="absolute top-0 right-0 w-4 h-4 md:w-6 md:h-6 border-t-4 border-r-4 border-blue-500 rounded-tr-lg"></div>
+                  <div className="absolute bottom-0 left-0 w-4 h-4 md:w-6 md:h-6 border-b-4 border-l-4 border-blue-500 rounded-bl-lg"></div>
+                  <div className="absolute bottom-0 right-0 w-4 h-4 md:w-6 md:h-6 border-b-4 border-r-4 border-blue-500 rounded-br-lg"></div>
                 </div>
               </div>
             </div>
             
-            <p className="text-sm text-muted-foreground text-center">
+            <p className="text-xs md:text-sm text-muted-foreground text-center">
               Point your camera at the QR code to connect
             </p>
           </div>
@@ -123,16 +137,17 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <Card className="bg-gradient-to-br from-background to-muted/20">
-        <CardContent className="p-6">
-          <div className="text-center space-y-4">
-            <div className="p-4 mx-auto w-fit rounded-full bg-primary/10">
-              <Download className="h-8 w-8 text-primary" />
+    <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+      {/* Header section - hidden on mobile, visible on desktop */}
+      <Card className="hidden md:block bg-gradient-to-br from-background to-muted/20">
+        <CardContent className="p-4">
+          <div className="text-center space-y-2">
+            <div className="p-2 mx-auto w-fit rounded-full bg-primary/10">
+              <Download className="h-6 w-6 text-primary" />
             </div>
             <div>
               <h3 className="text-lg font-semibold">Receive Files</h3>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Enter the room code or scan QR code to connect
               </p>
             </div>
@@ -140,8 +155,67 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
+      {/* Mobile-optimized layout - single section for mobile, two columns for desktop */}
+      <div className="md:grid md:grid-cols-2 md:gap-4">
+        {/* Single card for mobile, split into two for desktop */}
+        <Card className="md:hidden">
+          <CardContent className="p-4">
+            <div className="space-y-6">
+              {/* Room Code Section */}
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="roomCode" className="text-sm font-medium block mb-2">
+                    Room Code
+                  </label>
+                  <Input
+                    ref={inputRef}
+                    id="roomCode"
+                    type="text"
+                    value={roomCode}
+                    onChange={handleInputChange}
+                    placeholder="Enter 8-digit code"
+                    className="text-center font-mono text-lg tracking-widest"
+                    maxLength={8}
+                  />
+                </div>
+                
+                <Button
+                  type="submit"
+                  disabled={disabled || roomCode.length !== 8}
+                  className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
+                  size="lg"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Connect
+                </Button>
+              </form>
+
+              {/* QR Scanner Section */}
+              <div className="space-y-4 pt-2 border-t">
+                <div className="text-center">
+                  <QrCode className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <h4 className="font-medium text-sm">Scan QR Code</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Use your camera to scan
+                  </p>
+                </div>
+                
+                <Button
+                  onClick={() => setShowScanner(true)}
+                  variant="outline"
+                  className="w-full"
+                  size="lg"
+                >
+                  <Camera className="h-4 w-4 mr-2" />
+                  Open Scanner
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Desktop layout - separate cards */}
+        <Card className="hidden md:block">
           <CardContent className="p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -173,12 +247,12 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hidden md:block">
           <CardContent className="p-6">
             <div className="space-y-4">
               <div className="text-center">
                 <QrCode className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-                <h4 className="font-medium">Scan QR Code</h4>
+                <h4 className="font-medium text-base">Scan QR Code</h4>
                 <p className="text-sm text-muted-foreground">
                   Use your camera to scan
                 </p>
@@ -198,16 +272,53 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
         </Card>
       </div>
 
-      {roomCode && roomCode.length === 8 && (
-        <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/50">
-          <CardContent className="p-4">
-            <div className="text-center">
-              <p className="text-sm text-blue-700 dark:text-blue-300">
-                Ready to connect with room code: <span className="font-mono font-bold">{roomCode}</span>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Connection Confirmation Modal */}
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Blur Background Overlay */}
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={handleConnectCancel}
+          ></div>
+          
+          {/* Modal Content */}
+          <Card className="relative z-10 w-11/12 max-w-md mx-4 animate-in fade-in zoom-in duration-200">
+            <CardContent className="p-6">
+              <div className="text-center space-y-4">
+                <div className="p-3 mx-auto w-fit rounded-full bg-green-100 dark:bg-green-900/20">
+                  <QrCode className="h-8 w-8 text-green-600 dark:text-green-400" />
+                </div>
+                
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">QR Code Scanned!</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Ready to connect to room:
+                  </p>
+                  <div className="p-3 bg-muted rounded-lg">
+                    <span className="text-lg font-mono font-bold tracking-wider">{scannedCode}</span>
+                  </div>
+                </div>
+                
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleConnectCancel}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleConnectConfirm}
+                    className="flex-1 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Connect
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

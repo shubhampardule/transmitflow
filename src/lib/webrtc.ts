@@ -97,6 +97,8 @@ export class WebRTCService {
         urls: process.env.NEXT_PUBLIC_STUN_URL
       }] : []),
     ],
+    // For testing TURN server, you can temporarily force relay-only mode:
+    // iceTransportPolicy: 'relay', // Uncomment this line to test TURN only
     iceTransportPolicy: 'all',
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
@@ -239,7 +241,31 @@ export class WebRTCService {
 
   private async createPeerConnection(): Promise<void> {
     console.log('🔗 Creating WebRTC peer connection...');
+    
+    // Debug ICE server configuration
+    console.log('🧊 ICE Configuration:', {
+      iceServers: this.config.iceServers,
+      iceTransportPolicy: this.config.iceTransportPolicy,
+      turnConfigured: !!(process.env.NEXT_PUBLIC_TURN_URL && process.env.NEXT_PUBLIC_TURN_USER && process.env.NEXT_PUBLIC_TURN_PASS),
+      stunConfigured: !!process.env.NEXT_PUBLIC_STUN_URL
+    });
+    
     this.peerConnection = new RTCPeerConnection(this.config);
+    
+    // Add ICE candidate debugging
+    this.peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('🧊 ICE Candidate:', {
+          type: event.candidate.type,
+          protocol: event.candidate.protocol,
+          address: event.candidate.address,
+          port: event.candidate.port,
+          candidate: event.candidate.candidate
+        });
+      } else {
+        console.log('🧊 ICE gathering complete');
+      }
+    };
     
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection!.connectionState;
