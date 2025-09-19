@@ -37,12 +37,14 @@ export default function P2PFileTransfer() {
   const [roomCode, setRoomCode] = useState('');
   const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
   const [hasNavigatedToSharing, setHasNavigatedToSharing] = useState(false);
+  const [transferCompleted, setTransferCompleted] = useState(false);
 
   // Define handleReset first since other functions depend on it
   const handleReset = useCallback(() => {
     webrtcService.cleanup();
     setRoomCode('');
     setReceivedFiles([]);
+    setTransferCompleted(false);
     setTransferState({
       status: 'idle',
       files: [],
@@ -196,8 +198,15 @@ export default function P2PFileTransfer() {
       console.log('WebRTC connection state:', state);
       if (state === 'connected') {
         setTransferState(prev => ({ ...prev, status: 'connecting' }));
-      } else if (state === 'failed' || state === 'disconnected') {
+      } else if (state === 'failed') {
         setTransferState(prev => ({ ...prev, status: 'error', error: 'Connection failed' }));
+      } else if (state === 'disconnected') {
+        // Only treat disconnection as error if transfer wasn't completed successfully
+        if (!transferCompleted) {
+          setTransferState(prev => ({ ...prev, status: 'error', error: 'Connection failed' }));
+        } else {
+          console.log('✅ Connection closed after successful transfer - maintaining completed status');
+        }
       }
     };
 
@@ -257,6 +266,7 @@ export default function P2PFileTransfer() {
     };
 
     webrtcService.onTransferComplete = () => {
+      setTransferCompleted(true);
       setTransferState(prev => ({ ...prev, status: 'completed' }));
       toast.success('Transfer completed successfully!');
     };
@@ -296,7 +306,7 @@ export default function P2PFileTransfer() {
       toast.error(error);
       setTransferState(prev => ({ ...prev, status: 'error', error }));
     };
-  }, [handleReset]);
+  }, [handleReset, transferCompleted]);
 
   const handleCancelFile = useCallback((fileIndex: number) => {
     const file = transferState.files[fileIndex];

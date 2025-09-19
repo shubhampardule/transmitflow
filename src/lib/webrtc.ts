@@ -139,6 +139,7 @@ export class WebRTCService {
   }>();
   private cancelledFiles = new Set<number>(); // Track cancelled file indices
   private acknowledgedFiles = new Set<number>(); // Track files confirmed received by peer
+  private transferCompleted = false; // Track if transfer finished successfully
   
   // Receiver state - hybrid approach
   private receivedFiles = new Map<number, {
@@ -282,6 +283,13 @@ export class WebRTCService {
         this.cleanup();
       } else if (state === 'disconnected') {
         console.warn('⚠️ WebRTC connection disconnected');
+        // Only treat disconnection as error if transfer wasn't completed successfully
+        if (!this.transferCompleted) {
+          console.error('❌ Connection lost during transfer');
+          this.onError?.('Connection lost. Transfer incomplete.');
+        } else {
+          console.log('✅ Connection closed after successful transfer');
+        }
       }
     };
     
@@ -984,6 +992,7 @@ export class WebRTCService {
         break;
         
       case MSG_TYPE.TRANSFER_COMPLETE:
+        this.transferCompleted = true;
         this.onTransferComplete?.();
         this.onStatusMessage?.('All files received successfully!');
         break;
@@ -1197,6 +1206,7 @@ export class WebRTCService {
     // All files either acknowledged or cancelled
     if (acknowledgedCount + cancelledCount >= totalFiles) {
       console.log('🎉 All files processed! Transfer complete.');
+      this.transferCompleted = true;
       this.onTransferComplete?.();
       this.onStatusMessage?.('All files sent and confirmed received!');
     }
@@ -1654,6 +1664,7 @@ export class WebRTCService {
     this.expectedFiles = [];
     this.cancelledFiles.clear();
     this.acknowledgedFiles.clear();
+    this.transferCompleted = false;
     this.role = null;
     this.roomCode = '';
     
