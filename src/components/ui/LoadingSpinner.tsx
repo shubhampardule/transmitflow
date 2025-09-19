@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 
 export default function LoadingSpinner() {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false); // Default to light mode
 
   useEffect(() => {
-    // Check for saved dark mode preference first
+    // Check for saved theme preference first
     const savedTheme = localStorage.getItem('theme');
     
     if (savedTheme === 'dark') {
@@ -12,9 +12,9 @@ export default function LoadingSpinner() {
     } else if (savedTheme === 'light') {
       setIsDarkMode(false);
     } else {
-      // If no saved preference, check system preference
-      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setIsDarkMode(systemPrefersDark);
+      // For first-time users with no saved preference, default to light mode
+      // (We already initialized with false, so no need to change)
+      setIsDarkMode(false);
     }
   }, []);
 
@@ -90,13 +90,17 @@ export default function LoadingSpinner() {
         </div>
         
         {/* Orbiting purple dot with collision bounce */}
-        <div className="absolute inset-0" style={{
+        <div className="absolute inset-0 flex items-center justify-center" style={{
           animation: 'orbit1 2s linear infinite'
         }}>
-          <div className={`absolute top-0 left-1/2 w-3 h-3 ${
+          <div className={`absolute w-3 h-3 ${
             isDarkMode ? 'bg-purple-400' : 'bg-purple-500'
-          } rounded-full transform -translate-x-1/2 -translate-y-1.5 shadow-lg`}
+          } rounded-full shadow-lg`}
           style={{
+            top: '-6px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            transformOrigin: '50% 42px',
             animation: 'bounce-collision 2s ease-in-out infinite',
             boxShadow: isDarkMode 
               ? '0 0 15px rgba(196, 181, 253, 0.5)' 
@@ -105,13 +109,17 @@ export default function LoadingSpinner() {
         </div>
         
         {/* Orbiting green dot with collision bounce */}
-        <div className="absolute inset-0" style={{
+        <div className="absolute inset-0 flex items-center justify-center" style={{
           animation: 'orbit2 2.5s linear infinite'
         }}>
-          <div className={`absolute bottom-0 left-1/2 w-2.5 h-2.5 ${
+          <div className={`absolute w-2.5 h-2.5 ${
             isDarkMode ? 'bg-green-400' : 'bg-green-500'
-          } rounded-full transform -translate-x-1/2 translate-y-1.5 shadow-lg`}
+          } rounded-full shadow-lg`}
           style={{
+            bottom: '-5px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            transformOrigin: '50% -37px',
             animation: 'bounce-collision 2.5s ease-in-out infinite reverse',
             boxShadow: isDarkMode 
               ? '0 0 15px rgba(74, 222, 128, 0.5)' 
