@@ -39,30 +39,79 @@ export default function LoadingSpinner() {
       </div>
 
       {/* Modern Loading Animation */}
-      <div className="relative">
-        {/* Outer rotating ring */}
-        <div className={`w-16 h-16 border-4 ${
-          isDarkMode ? 'border-gray-700 border-t-blue-400' : 'border-gray-200 border-t-blue-500'
-        } rounded-full animate-spin`}></div>
-        
-        {/* Inner pulsing dot */}
+      <div className="relative w-24 h-24">
+        {/* Center breathing/popout blue dot */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className={`w-3 h-3 ${
+          <div className={`w-6 h-6 ${
             isDarkMode ? 'bg-blue-400' : 'bg-blue-500'
-          } rounded-full animate-pulse`}></div>
+          } rounded-full`} 
+          style={{
+            animation: 'breathe 1.5s ease-in-out infinite'
+          }}></div>
         </div>
         
-        {/* Orbital dots */}
-        <div className="absolute inset-0 animate-spin" style={{ animationDuration: '2s', animationDirection: 'reverse' }}>
-          <div className={`absolute top-0 left-1/2 w-2 h-2 ${
+        {/* Orbiting purple dot with collision bounce */}
+        <div className="absolute inset-0" style={{
+          animation: 'orbit1 2s linear infinite'
+        }}>
+          <div className={`absolute top-0 left-1/2 w-3 h-3 ${
             isDarkMode ? 'bg-purple-400' : 'bg-purple-500'
-          } rounded-full transform -translate-x-1/2 -translate-y-1`}></div>
+          } rounded-full transform -translate-x-1/2 -translate-y-1.5`}
+          style={{
+            animation: 'bounce-collision 2s ease-in-out infinite'
+          }}></div>
         </div>
-        <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s' }}>
-          <div className={`absolute bottom-0 left-1/2 w-1.5 h-1.5 ${
+        
+        {/* Orbiting green dot with collision bounce */}
+        <div className="absolute inset-0" style={{
+          animation: 'orbit2 2.5s linear infinite'
+        }}>
+          <div className={`absolute bottom-0 left-1/2 w-2.5 h-2.5 ${
             isDarkMode ? 'bg-green-400' : 'bg-green-500'
-          } rounded-full transform -translate-x-1/2 translate-y-1`}></div>
+          } rounded-full transform -translate-x-1/2 translate-y-1.5`}
+          style={{
+            animation: 'bounce-collision 2.5s ease-in-out infinite reverse'
+          }}></div>
         </div>
+
+        {/* CSS Animations */}
+        <style jsx>{`
+          @keyframes breathe {
+            0%, 100% { 
+              transform: scale(1);
+              opacity: 0.8;
+            }
+            50% { 
+              transform: scale(1.3);
+              opacity: 1;
+            }
+          }
+          
+          @keyframes orbit1 {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          
+          @keyframes orbit2 {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(-360deg); }
+          }
+          
+          @keyframes bounce-collision {
+            0%, 100% { 
+              transform: scale(1) translateY(0px);
+            }
+            25% { 
+              transform: scale(1.2) translateY(-2px);
+            }
+            50% { 
+              transform: scale(0.9) translateY(0px);
+            }
+            75% { 
+              transform: scale(1.1) translateY(2px);
+            }
+          }
+        `}</style>
       </div>
 
       {/* Loading text */}
