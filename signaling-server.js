@@ -13,7 +13,9 @@ app.use(cors({
         /^https:\/\/.*\.vercel\.app$/,
         'https://sendify-ivory.vercel.app',
         'https://sendify-ten.vercel.app',
-        'https://sendify.vercel.app'
+        'https://sendify.vercel.app',
+        'https://serverforminecraftbedrock.fun',
+        'https://www.serverforminecraftbedrock.fun'
       ]
     : true,
   credentials: true,
@@ -25,7 +27,12 @@ app.use(cors({
 const io = socketIO(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? [/^https:\/\/.*\.vercel\.app$/, 'https://sendify-ten.vercel.app']
+      ? [
+          /^https:\/\/.*\.vercel\.app$/, 
+          'https://sendify-ten.vercel.app',
+          'https://serverforminecraftbedrock.fun',
+          'https://www.serverforminecraftbedrock.fun'
+        ]
       : true,
     methods: ['GET', 'POST'],
     credentials: true
