@@ -39,7 +39,7 @@ export default function LoadingSpinner() {
       </div>
 
       {/* Modern Loading Animation */}
-      <div className="relative w-24 h-24">
+      <div className="relative w-24 h-24 mx-auto">
         {/* Ambient glow rings */}
         <div className="absolute inset-0 flex items-center justify-center">
           <div className={`w-20 h-20 border border-opacity-20 ${
