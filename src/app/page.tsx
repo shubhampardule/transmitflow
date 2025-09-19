@@ -4,6 +4,7 @@ import FloatingScrollButton from '@/components/FloatingScrollButton';
 import { Toaster } from 'sonner';
 import { Suspense } from 'react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { Analytics } from "@vercel/analytics/next";
 
 export default function Home() {
   return (
@@ -18,6 +19,9 @@ export default function Home() {
       
       {/* Floating Scroll Button - Outside all other UI elements */}
       <FloatingScrollButton />
+      
+      {/* Vercel Analytics */}
+      <Analytics />
     </div>
   );
 }
