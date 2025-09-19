@@ -2,8 +2,7 @@
 import P2PFileTransfer from '@/components/P2PFileTransfer';
 import FloatingScrollButton from '@/components/FloatingScrollButton';
 import { Toaster } from 'sonner';
-import { Suspense } from 'react';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import DelayedLoader from '@/components/ui/DelayedLoader';
 import { Analytics } from "@vercel/analytics/next";
 
 export default function Home() {
@@ -11,9 +10,9 @@ export default function Home() {
     <div className="min-h-screen w-full bg-white">
       {/* Content */}
       <div className="relative">
-          <Suspense fallback={<LoadingSpinner />}>
+          <DelayedLoader minimumLoadTime={1500}>
             <P2PFileTransfer />
-          </Suspense>
+          </DelayedLoader>
         <Toaster position="top-right" richColors />
       </div>
       
