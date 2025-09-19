@@ -381,7 +381,12 @@ export class WebRTCService {
     
     this.dataChannel.onerror = (error) => {
       console.error('Data channel error:', error);
-      this.onError?.('Connection error occurred');
+      // Only treat as error if transfer wasn't completed successfully
+      if (!this.transferCompleted) {
+        this.onError?.('Connection error occurred');
+      } else {
+        console.log('✅ Data channel closed after successful transfer');
+      }
     };
     
     this.dataChannel.onmessage = async (event) => {
