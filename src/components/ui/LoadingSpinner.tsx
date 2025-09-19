@@ -20,7 +20,7 @@ export default function LoadingSpinner() {
 
   return (
     <div className={`fixed inset-0 w-full h-screen flex flex-col items-center justify-center z-50 transition-colors duration-300 ${
-      isDarkMode ? 'bg-gray-950' : 'bg-white'
+      isDarkMode ? 'bg-slate-900' : 'bg-indigo-50'
     }`}>
       {/* Logo/Brand Area */}
       <div className="mb-8 text-center">
