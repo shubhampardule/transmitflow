@@ -31,7 +31,9 @@ class SignalingService {
         console.log('Detected protocol:', protocol);
         
         // Production configuration
-        if (hostname.includes('vercel.app') || hostname.includes('your-custom-domain.com')) {
+        if (hostname.includes('vercel.app') || 
+            hostname.includes('serverforminecraftbedrock.fun') || 
+            hostname.includes('your-custom-domain.com')) {
           // Use your deployed signaling server URL
           this.serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'https://signaling-server-6ziv.onrender.com';
         } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
