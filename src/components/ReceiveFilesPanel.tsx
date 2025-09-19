@@ -22,7 +22,7 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
   
   const [roomCode, setRoomCode] = useState(receiveCode || '');
   const [showScanner, setShowScanner] = useState(false);
-  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showConnectInterface, setShowConnectInterface] = useState(false);
   const [scannedCode, setScannedCode] = useState('');
   const [hasAutoConnected, setHasAutoConnected] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,7 +64,7 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
       
       setScannedCode(code.toUpperCase());
       setShowScanner(false);
-      setShowConnectModal(true);
+      setShowConnectInterface(true);
     }
   }, []);
 
@@ -82,12 +82,12 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
   };
 
   const handleConnectConfirm = () => {
-    setShowConnectModal(false);
+    setShowConnectInterface(false);
     onReceiveFiles(scannedCode);
   };
 
   const handleConnectCancel = () => {
-    setShowConnectModal(false);
+    setShowConnectInterface(false);
     setScannedCode('');
   };
 
@@ -133,6 +133,68 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
           </div>
         </CardContent>
       </Card>
+    );
+  }
+
+  // Show connect interface after QR scan
+  if (showConnectInterface) {
+    return (
+      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
+        {/* Header section - hidden on mobile, visible on desktop */}
+        <Card className="hidden md:block bg-gradient-to-br from-background to-muted/20">
+          <CardContent className="p-4">
+            <div className="text-center space-y-2">
+              <div className="p-2 mx-auto w-fit rounded-full bg-primary/10">
+                <Download className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Receive Files</h3>
+                <p className="text-xs text-muted-foreground">
+                  Enter the room code or scan QR code to connect
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Connect Interface - popup style */}
+        <Card className="bg-gradient-to-br from-background to-muted/20 border-green-200 dark:border-green-800">
+          <CardContent className="p-6">
+            <div className="text-center space-y-4">
+              <div className="p-3 mx-auto w-fit rounded-full bg-green-100 dark:bg-green-900/20">
+                <QrCode className="h-8 w-8 text-green-600 dark:text-green-400" />
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-2">QR Code Scanned!</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Ready to connect to room:
+                </p>
+                <div className="p-3 bg-muted rounded-lg mb-4">
+                  <span className="text-lg font-mono font-bold tracking-wider">{scannedCode}</span>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 justify-center max-w-sm mx-auto">
+                <Button
+                  variant="outline"
+                  onClick={handleConnectCancel}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConnectConfirm}
+                  className="flex-1 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Connect
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -271,55 +333,6 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
           </CardContent>
         </Card>
       </div>
-
-      {/* Connection Confirmation Modal */}
-      {showConnectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* Blur Background Overlay */}
-          <div 
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={handleConnectCancel}
-          ></div>
-          
-          {/* Modal Content */}
-          <Card className="relative z-10 w-11/12 max-w-md mx-4 animate-in fade-in zoom-in duration-200">
-            <CardContent className="p-6">
-              <div className="text-center space-y-4">
-                <div className="p-3 mx-auto w-fit rounded-full bg-green-100 dark:bg-green-900/20">
-                  <QrCode className="h-8 w-8 text-green-600 dark:text-green-400" />
-                </div>
-                
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">QR Code Scanned!</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Ready to connect to room:
-                  </p>
-                  <div className="p-3 bg-muted rounded-lg">
-                    <span className="text-lg font-mono font-bold tracking-wider">{scannedCode}</span>
-                  </div>
-                </div>
-                
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleConnectCancel}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleConnectConfirm}
-                    className="flex-1 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Connect
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }
