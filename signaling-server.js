@@ -94,62 +94,49 @@ const connectionStats = new Map();
 const MAX_ROOM_SIZE = 2;
 const ROOM_TIMEOUT = 60 * 60 * 1000; // 1 hour for long transfers
 
-// Multiple TURN servers for better global coverage
+// Multiple TURN/STUN servers for better global coverage
 const turnServers = [
-  // Primary Metered.ca servers (global coverage)
+  // Custom TURN server (Oracle COTURN - primary)
+  ...(process.env.NEXT_PUBLIC_TURN_URL && process.env.NEXT_PUBLIC_TURN_USER && process.env.NEXT_PUBLIC_TURN_PASS ? [{
+    urls: [process.env.NEXT_PUBLIC_TURN_URL],
+    username: process.env.NEXT_PUBLIC_TURN_USER,
+    credential: process.env.NEXT_PUBLIC_TURN_PASS,
+    region: "custom"
+  }] : []),
+  
+  // Custom STUN server (Oracle COTURN - same server, STUN mode)
+  ...(process.env.NEXT_PUBLIC_STUN_URL ? [{
+    urls: [process.env.NEXT_PUBLIC_STUN_URL],
+    region: "custom"
+  }] : []),
+  
+  // Free public STUN servers for fallback
   {
     urls: [
-      "turn:standard.relay.metered.ca:80",
-      "turn:standard.relay.metered.ca:80?transport=tcp",
-      "turn:standard.relay.metered.ca:443",
-      "turn:standard.relay.metered.ca:443?transport=tcp"
+      "stun:stun.l.google.com:19302",
+      "stun:stun1.l.google.com:19302",
+      "stun:stun2.l.google.com:19302"
     ],
-    username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME || "your_username",
-    credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL || "your_credential",
     region: "global"
   },
+  
+  // Additional public STUN servers for redundancy
   {
     urls: [
-      "turn:relay.metered.ca:80",
-      "turn:relay.metered.ca:80?transport=tcp",
-      "turn:relay.metered.ca:443",
-      "turn:relay.metered.ca:443?transport=tcp"
+      "stun:stun.stunprotocol.org:3478",
+      "stun:stun.voiparound.com",
+      "stun:stun.voipbuster.com"
     ],
-    username: process.env.NEXT_PUBLIC_METERED_TURN_USERNAME_2 || "your_username2",
-    credential: process.env.NEXT_PUBLIC_METERED_TURN_CREDENTIAL_2 || "your_credential2",
     region: "global"
   },
-  // Free fallback TURN servers
-  {
-    urls: [
-      "turn:openrelay.metered.ca:80",
-      "turn:openrelay.metered.ca:80?transport=tcp",
-      "turn:openrelay.metered.ca:443",
-      "turn:openrelay.metered.ca:443?transport=tcp"
-    ],
-    username: "openrelayproject",
-    credential: "openrelayproject",
-    region: "global"
-  },
-  // Additional free servers for redundancy
+  
+  // Free TURN server fallback
   {
     urls: [
       "turn:turn.anyfirewall.com:443?transport=tcp"
     ],
     username: "webrtc",
     credential: "webrtc",
-    region: "global"
-  },
-  // Xirsys fallback (if you have account)
-  {
-    urls: [
-      "turn:global.xirsys.com:80?transport=udp",
-      "turn:global.xirsys.com:3478?transport=udp",
-      "turn:global.xirsys.com:80?transport=tcp",
-      "turn:global.xirsys.com:3478?transport=tcp"
-    ],
-    username: process.env.XIRSYS_USERNAME || "fallback_user",
-    credential: process.env.XIRSYS_CREDENTIAL || "fallback_pass",
     region: "global"
   }
 ];

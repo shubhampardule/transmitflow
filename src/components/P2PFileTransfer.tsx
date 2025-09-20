@@ -3,9 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Wifi, WifiOff, Zap, Shield, Globe, Lock, ArrowLeftRight, Rocket, Users, Coffee } from 'lucide-react';
+import { Upload, Download, Zap, Shield, Globe, Lock, ArrowLeftRight, Rocket, Users, Coffee } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TransferState } from '@/types';
@@ -482,16 +481,6 @@ export default function P2PFileTransfer() {
             <div className="flex items-center justify-center gap-3 mb-4">
               <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500">
                 <Zap className="h-6 w-6 text-white" />
-              </div>
-              <div className="flex items-center gap-2">
-                {isConnected ? (
-                  <Wifi className="h-5 w-5 text-green-500" />
-                ) : (
-                  <WifiOff className="h-5 w-5 text-red-500" />
-                )}
-                <Badge variant={isConnected ? 'default' : 'destructive'}>
-                  {isConnected ? 'Connected' : 'Disconnected'}
-                </Badge>
               </div>
             </div>
             

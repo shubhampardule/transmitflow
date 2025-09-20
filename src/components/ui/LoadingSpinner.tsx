@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from "react";
 
-export default function LoadingSpinner() {
+interface LoadingSpinnerProps {
+  connectionStatus?: 'connecting' | 'connected' | 'failed';
+  errorMessage?: string;
+}
+
+export default function LoadingSpinner({ connectionStatus = 'connecting', errorMessage = '' }: LoadingSpinnerProps) {
   const [isDarkMode, setIsDarkMode] = useState(false); // Default to light mode
 
   useEffect(() => {
@@ -187,6 +192,47 @@ export default function LoadingSpinner() {
             }
           }
         `}</style>
+      </div>
+      
+      {/* Connection Status */}
+      <div className="mt-8 text-center">
+        {connectionStatus === 'connecting' && (
+          <p className={`text-sm transition-colors duration-300 ${
+            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+          }`}>
+            Getting ready...
+          </p>
+        )}
+        
+        {connectionStatus === 'connected' && (
+          <p className={`text-sm font-medium transition-colors duration-300 ${
+            isDarkMode ? 'text-green-400' : 'text-green-600'
+          }`}>
+            ✓ All set!
+          </p>
+        )}
+        
+        {connectionStatus === 'failed' && (
+          <div className="space-y-2">
+            <p className={`text-sm font-medium transition-colors duration-300 ${
+              isDarkMode ? 'text-red-400' : 'text-red-600'
+            }`}>
+              ✗ Something went wrong
+            </p>
+            {errorMessage && (
+              <p className={`text-xs transition-colors duration-300 ${
+                isDarkMode ? 'text-gray-500' : 'text-gray-500'
+              }`}>
+                {errorMessage}
+              </p>
+            )}
+            <p className={`text-xs transition-colors duration-300 ${
+              isDarkMode ? 'text-gray-500' : 'text-gray-500'
+            }`}>
+              Please check your internet connection and try again
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
