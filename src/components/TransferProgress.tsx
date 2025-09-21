@@ -404,41 +404,6 @@ export default function TransferProgress({
                 );
               })}
             </div>
-            
-            {/* Download All Button */}
-            {isReceiver && transferState.files.length > 1 && (() => {
-              const completedFiles = transferState.files.filter((file, index) => {
-                const progress = transferState.progress.find(p => p.fileIndex === index);
-                return progress && progress.progress >= 100 && !progress.cancelled;
-              });
-              
-              return completedFiles.length > 1 ? (
-                <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <Button
-                    onClick={() => {
-                      let downloadedCount = 0;
-                      completedFiles.forEach(file => {
-                        const receivedFile = receivedFiles.find(rf => rf.name === file.name && rf.size === file.size);
-                        if (receivedFile) {
-                          downloadFileManual(receivedFile);
-                          downloadedCount++;
-                        }
-                      });
-                      
-                      if (downloadedCount > 0) {
-                        toast.success(`Downloaded ${downloadedCount} files`);
-                      } else {
-                        toast.error('No files available for download');
-                      }
-                    }}
-                    className="w-full"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download All ({completedFiles.length} files)
-                  </Button>
-                </div>
-              ) : null;
-            })()}
           </CardContent>
         </Card>
       )}
