@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import TransmitFlowLogoOnly from "./TransmitFlowLogoOnly";
 
 interface LoadingSpinnerProps {
   connectionStatus?: 'connecting' | 'connected' | 'failed';
@@ -29,6 +30,13 @@ export default function LoadingSpinner({ connectionStatus = 'connecting', errorM
     }`}>
       {/* Logo/Brand Area */}
       <div className="mb-8 text-center">
+        <div className="flex justify-center mb-4">
+          <TransmitFlowLogoOnly 
+            size={64} 
+            color={isDarkMode ? "#8B5CF6" : "#6366F1"}
+            className="animate-pulse"
+          />
+        </div>
         <h1 className={`text-4xl font-bold bg-gradient-to-r ${
           isDarkMode 
             ? 'from-blue-300 to-purple-300' 
