@@ -439,39 +439,43 @@ export default function TransferProgress({
                 </div>
               ) : null;
             })()}
-            
-            {/* Action Buttons at Bottom */}
-            <div className="mt-6 flex gap-3">
-              {hasError ? (
-                <Button onClick={onReset} variant="outline" className="flex-1">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Main
-                </Button>
-              ) : transferState.status === 'connecting' ? (
-                <Button onClick={onReset} variant="outline" className="flex-1">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Cancel & Go Back
-                </Button>
-              ) : isTransferring ? (
-                <Button onClick={onCancel} variant="outline" className="flex-1">
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel Transfer
-                </Button>
-              ) : isReceiver ? (
-                <Button onClick={onReset} variant="outline" className="flex-1">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Menu
-                </Button>
-              ) : (
-                <Button onClick={onReset} variant="outline" className="flex-1">
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  New Transfer
-                </Button>
-              )}
-            </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Action Buttons - Always visible */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex gap-3">
+            {hasError ? (
+              <Button onClick={onReset} variant="outline" className="flex-1">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Main
+              </Button>
+            ) : transferState.status === 'connecting' ? (
+              <Button onClick={onReset} variant="outline" className="flex-1">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Cancel & Go Back
+              </Button>
+            ) : isTransferring ? (
+              <Button onClick={onCancel} variant="outline" className="flex-1">
+                <X className="h-4 w-4 mr-2" />
+                Cancel Transfer
+              </Button>
+            ) : isReceiver ? (
+              <Button onClick={onReset} variant="outline" className="flex-1">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Menu
+              </Button>
+            ) : (
+              <Button onClick={onReset} variant="outline" className="flex-1">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                New Transfer
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
       </div>
     </>
   );
