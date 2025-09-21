@@ -1,24 +1,35 @@
 <svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
     <!-- 
-      Definitions for reusable elements. The gradient is defined here.
+      TransmitFlow Original Logo - Custom Lightning Design
+      Created specifically for TransmitFlow to avoid copyright issues
     -->
     <defs>
-        <linearGradient id="zapGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <!-- Using standard hex codes for blue-500 and purple-500 -->
+        <linearGradient id="transmitGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <!-- Custom gradient colors for TransmitFlow brand -->
             <stop offset="0%" stop-color="#3B82F6" />
+            <stop offset="50%" stop-color="#6366F1" />
             <stop offset="100%" stop-color="#8B5CF6" />
         </linearGradient>
     </defs>
     
-    <!-- The circular background filled with the gradient -->
-    <circle cx="50" cy="50" r="50" fill="url(#zapGradient)" />
+    <!-- The circular background with our custom gradient -->
+    <circle cx="50" cy="50" r="50" fill="url(#transmitGradient)" />
     
     <!-- 
-      The Zap/Lightning Icon.
-      The path data is placed inside a group <g> tag that scales and centers it.
-      The original icon was 24x24, so we scale it up and position it in the middle.
+      Custom Lightning Design for TransmitFlow
+      Original design - completely different from Lucide/Feather icons
+      Represents data flow and transmission
     -->
-    <g transform="translate(25, 25) scale(2.08)">
-        <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <g transform="translate(50, 50)">
+        <!-- Main lightning bolt - original design - BIGGER SIZE -->
+        <path d="M-12 -25 L12 -7 L-3 -7 L18 20 L-18 0 L3 0 Z" 
+              fill="white" 
+              stroke="none"/>
+        
+        <!-- Small transmission dots -->
+        <circle cx="-20" cy="-10" r="2.5" fill="white" opacity="0.8"/>
+        <circle cx="20" cy="10" r="2.5" fill="white" opacity="0.8"/>
+        <circle cx="-15" cy="15" r="2" fill="white" opacity="0.6"/>
+        <circle cx="15" cy="-15" r="2" fill="white" opacity="0.6"/>
     </g>
 </svg>

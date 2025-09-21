@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Zap, Shield, Globe, Lock, ArrowLeftRight, Rocket, Users, Coffee } from 'lucide-react';
+import { Upload, Download, Shield, Globe, Lock, ArrowLeftRight, Rocket, Users, Coffee } from 'lucide-react';
 import { toast } from 'sonner';
+import TransmitFlowLogo from './ui/TransmitFlowLogo';
 
 import { TransferState } from '@/types';
 import { signalingService } from '@/lib/signaling';
@@ -479,9 +480,7 @@ export default function P2PFileTransfer() {
           
           <CardHeader className="text-center">
             <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="p-3 rounded-full bg-gradient-to-r from-blue-500 to-purple-500">
-                <Zap className="h-6 w-6 text-white" />
-              </div>
+              <TransmitFlowLogo size={48} />
             </div>
             
             <CardTitle className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent leading-tight pb-2 dark:from-blue-300 dark:to-purple-300 transition-all duration-500 ease-in-out">
