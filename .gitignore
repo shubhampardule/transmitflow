@@ -8,12 +8,23 @@ out/
 # Production build
 dist/
 
+# TypeScript build info
+*.tsbuildinfo
+
 # Environment variables
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Development documentation and temporary files
+*_OPTIMIZATION*.md
+*PERFORMANCE*.md
+*DEPLOYMENT*.md
+*MONITORING*.md
+DEBUG_INFO.txt
+server-package.json
 
 # Logs
 npm-debug.log*
