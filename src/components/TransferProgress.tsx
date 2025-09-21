@@ -447,6 +447,11 @@ export default function TransferProgress({
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Main
                 </Button>
+              ) : transferState.status === 'connecting' ? (
+                <Button onClick={onReset} variant="outline" className="flex-1">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Cancel & Go Back
+                </Button>
               ) : isTransferring ? (
                 <Button onClick={onCancel} variant="outline" className="flex-1">
                   <X className="h-4 w-4 mr-2" />

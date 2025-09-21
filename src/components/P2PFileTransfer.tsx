@@ -317,6 +317,30 @@ export default function P2PFileTransfer() {
     };
   }, [handleReset, transferCompleted]);
 
+  // Connection timeout - auto-fail if stuck connecting for too long
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    if (transferState.status === 'connecting') {
+      // Set a 30-second timeout for connection attempts
+      timeoutId = setTimeout(() => {
+        console.log('Connection timeout reached');
+        toast.error('Connection timeout - the room code may be invalid or the sender is offline');
+        setTransferState(prev => ({ 
+          ...prev, 
+          status: 'error', 
+          error: 'Connection timeout. Please check the room code and try again.' 
+        }));
+      }, 30000); // 30 seconds
+    }
+    
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [transferState.status]);
+
   const handleCancelFile = useCallback((fileIndex: number) => {
     const file = transferState.files[fileIndex];
     if (!file) return;
