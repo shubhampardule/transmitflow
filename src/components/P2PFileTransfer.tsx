@@ -11,7 +11,7 @@ import TransmitFlowLogo from './ui/TransmitFlowLogo';
 import { TransferState } from '@/types';
 import { signalingService } from '@/lib/signaling';
 import { webrtcService } from '@/lib/webrtc';
-import { generateRoomCode } from '@/lib/file-utils';
+import { generateRoomCode, downloadFile } from '@/lib/file-utils';
 
 import SendFilesPanel from './SendFilesPanel';
 import ReceiveFilesPanel from './ReceiveFilesPanel';
@@ -258,11 +258,20 @@ export default function P2PFileTransfer() {
       console.log('onFileReceived called with file:', file.name, file.size, 'bytes');
       setReceivedFiles(prev => [...prev, file]);
       
-      // Show success notification without auto-download
-      toast.success(`File received: ${file.name}`, {
-        description: 'Click the download button to save the file',
-        duration: 5000,
-      });
+      // Auto-download the file immediately
+      try {
+        downloadFile(file);
+        toast.success(`File received and downloaded: ${file.name}`, {
+          description: `${file.name} has been automatically saved to your downloads folder`,
+          duration: 5000,
+        });
+      } catch (error) {
+        console.error('Error auto-downloading file:', error);
+        toast.error(`File received but download failed: ${file.name}`, {
+          description: 'You can manually download using the download button',
+          duration: 7000,
+        });
+      }
     };
 
     webrtcService.onTransferComplete = () => {
