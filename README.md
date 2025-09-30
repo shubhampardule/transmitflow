@@ -501,7 +501,7 @@ p2p-react/
 
 </div>
 
-## 🔒 Security & Privacy Features
+## 🔒 Security & Privacy
 
 <div align="center">
 
@@ -513,49 +513,40 @@ p2p-react/
 
 </div>
 
-| 🔐 **Security Feature** | 📝 **How It Works** | 🎯 **Benefit** |
-|:------------------------|:---------------------|:----------------|
-| **🚫 Zero Server Storage** | Files never touch our servers | Complete data ownership |
-| **🔗 Direct P2P Transfer** | WebRTC creates direct device connection | No intermediary access |
-| **⏱️ Temporary Sessions** | Rooms auto-expire after transfers | No persistent data |
-| **🔐 Encrypted Signaling** | WebSocket connections are secured | Safe connection setup |
-| **🏠 Isolated Rooms** | Each transfer gets unique room code | No cross-session access |
-| **🌐 Browser Sandbox** | Runs in secure browser environment | OS-level protection |
-| **🔍 No Analytics** | Zero tracking or data collection | Complete anonymity |
-| **📖 Open Source** | Full code transparency | Community-verified security |
+### �️ **Security Architecture**
 
-### 🚨 **What We DON'T Do**
-
-<div align="center">
-
-| ❌ **Never** | ✅ **Always** |
-|:-------------|:--------------|
-| Store your files on servers | Direct device-to-device transfer |
-| Track your usage or data | Respect your complete privacy |
-| Require account registration | Work anonymously |
-| Collect personal information | Zero data collection |
-| Share data with third parties | Local-only processing |
-| Keep transfer histories | Clean slate every time |
-
-</div>
+| � **Feature** | 📝 **Implementation** |
+|:----------------|:----------------------|
+| **🚫 Zero Server Storage** | Files stream directly between devices via WebRTC |
+| **⏱️ Temporary Sessions** | Room codes auto-expire after transfers complete |
+| **🔐 Encrypted Signaling** | Secure WebSocket connections for peer discovery |
+| **🏠 Isolated Rooms** | Each transfer gets unique, private room code |
+| **🌐 Browser Sandbox** | Runs in secure browser environment with OS-level protection |
+| **🔍 No Analytics** | Zero tracking, logging, or data collection |
+| **📖 Open Source** | Full code transparency for community security audits |
 
 ### 🔧 **Development Environment**
 
-**🛠️ Setup Details**
-- **Package Manager**: npm (with lockfile for reproducible builds)
-- **Bundler**: Next.js with Turbopack for development
-- **Code Quality**: ESLint 9 with Next.js configuration
-- **Styling**: Tailwind CSS 3.4.17 with PostCSS 8.4.49
-- **Type Checking**: TypeScript 5+ with strict mode
-- **UI Components**: shadcn/ui with "new-york" style preset
+**🛠️ Setup Requirements**
+- **Node.js 18+** with npm for package management
+- **Modern Browser** for testing (Chrome, Firefox, Safari, Edge)
 
-**🚀 Key Dependencies**
-- `next`: 15.4.6 (App Router + Turbopack)
-- `react`: 19.1.0 (Latest with concurrent features)
-- `typescript`: 5+ (Advanced type safety)
-- `socket.io-client`: 4.8.1 (Real-time communication)
-- `@yudiel/react-qr-scanner`: 2.3.1 (QR scanning)
-- `@vercel/analytics`: 1.5.0 (Performance monitoring)
+**⚡ Quick Start**
+```bash
+# Clone and install
+git clone https://github.com/shubhampardule/transmitflow.git
+cd transmitflow
+npm install
+
+# Start development server with Turbopack
+npm run dev
+```
+
+**🚀 Key Technologies**
+- **Framework**: Next.js 15.4.6 with App Router and Turbopack
+- **UI**: React 19 + TypeScript 5+ + Tailwind CSS + shadcn/ui
+- **P2P**: WebRTC + Socket.IO 4.8.1 for real-time communication
+- **Tools**: @yudiel/react-qr-scanner, Vercel Analytics, ESLint 9
 
 ## � Troubleshooting
 
@@ -569,18 +560,18 @@ p2p-react/
 | **Connection timeout** | Try refreshing both devices and ensure stable internet connection |
 | **Slow transfer speeds** | Connect devices to same WiFi network for optimal performance |
 
-### **Browser Compatibility**
-- ✅ **Chrome/Chromium 90+**: Full support
-- ✅ **Firefox 88+**: Full support  
-- ✅ **Safari 14+**: Full support
-- ✅ **Edge 90+**: Full support
-- ❓ **Mobile browsers**: Generally supported, may have memory limitations
+### **Browser & Platform Support**
+- ✅ **Chrome/Chromium 90+**: Full support with best performance
+- ✅ **Firefox 88+**: Full support with excellent compatibility  
+- ✅ **Safari 14+**: Full support on macOS and iOS
+- ✅ **Edge 90+**: Full support on Windows
+- ✅ **Mobile browsers**: Supported with memory limitations (recommended <100MB files)
+- ✅ **Cross-Platform**: Windows, macOS, Linux, iOS, Android - works everywhere
 
-### **Performance Tips**
-- Use WiFi instead of mobile data for faster transfers
-- Keep file sizes reasonable on mobile devices (under 100MB recommended)
-- Close other tabs/apps during large transfers
-- Ensure both devices have sufficient battery
+### **Performance Optimization**
+- Use WiFi instead of mobile data for fastest transfers
+- Close other browser tabs during large file transfers
+- Ensure both devices have sufficient battery and stable connection
 
 ## 🚀 Deployment
 
@@ -790,26 +781,16 @@ This project is licensed under the **Creative Commons Attribution-NonCommercial 
 
 <div align="center">
 
-**Built with ❤️ using amazing open-source technologies:**
-
-</div>
-
-- 🌐 **[WebRTC](https://webrtc.org/)** - For enabling peer-to-peer magic
-- ⚛️ **[Next.js 15](https://nextjs.org/)** - The React framework with App Router and Turbopack
-- 🎨 **[Tailwind CSS](https://tailwindcss.com/)** - For beautiful, responsive styling
-- 🧩 **[shadcn/ui](https://ui.shadcn.com/)** - For modern, accessible component library
-- 📡 **[Socket.IO](https://socket.io/)** - For real-time signaling communication
-- 📱 **[@yudiel/react-qr-scanner](https://github.com/yudielcurbelo/react-qr-scanner)** - For advanced QR code scanning
-- 🔍 **[QRCode](https://github.com/soldair/node-qrcode)** - For QR code generation
-- 📊 **[Vercel Analytics](https://vercel.com/analytics)** - For performance monitoring
-- 🔔 **[Sonner](https://sonner.emilkowal.ski/)** - For beautiful toast notifications
-- ⚡ **[Lucide React](https://lucide.dev/)** - For consistent, beautiful icons
+**Built with ❤️ using amazing open-source technologies**
 
 ### 💝 **Special Thanks**
 
 - All our amazing [contributors](https://github.com/shubhampardule/transmitflow/graphs/contributors)
 - The open-source community for continuous inspiration
 - Everyone who provided feedback and suggestions
+- The developers of WebRTC, Next.js, and all the incredible tools that make this project possible
+
+</div>
 
 ---
 
