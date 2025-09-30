@@ -652,7 +652,7 @@ export default function P2PFileTransfer() {
                   <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
                     Fully open-source for transparency. Help us improve on{' '}
                     <a 
-                      href="https://github.com/10neWOlF/transmitflow" 
+                      href="https://github.com/shubhampardule/transmitflow" 
                       target="_blank" 
                       rel="noopener noreferrer"
                       className="text-teal-600 hover:text-teal-700 font-medium dark:text-teal-400 dark:hover:text-teal-300 transition-colors duration-300 ease-in-out"
@@ -675,7 +675,7 @@ export default function P2PFileTransfer() {
                   Love using TransmitFlow? Help us keep it free and running smoothly!
                 </p>
                 <a
-                  href="https://buymeacoffee.com/10newolf"
+                  href="https://buymeacoffee.com/shubhampardule"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 ease-in-out"
@@ -706,7 +706,7 @@ export default function P2PFileTransfer() {
             </div>
             <div className="flex items-center gap-4">
               <a
-                href="https://github.com/10neWOlF"
+                href="https://github.com/shubhampardule"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-black/60 hover:text-black transition-colors dark:text-white/60 dark:hover:text-white"

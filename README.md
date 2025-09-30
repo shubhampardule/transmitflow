@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/10neWOlF/transmitflow/main/src/app/icon-192.svg" alt="TransmitFlow Logo" width="32" height="32" style="vertical-align:middle;"> TransmitFlow
+# <img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/favicon.svg" alt="TransmitFlow Logo" width="32" height="32" style="vertical-align:middle;"> TransmitFlow
 
 <div align="center">
 
@@ -11,9 +11,9 @@
 **Send files instantly between devices without any servers storing your data - Seamless file transfer made simple.**
 > **⚠️ Note:** Large file transfers (e.g., 1GB+) may use significant memory on your device. On mobile or low-RAM devices, very large transfers can cause performance issues or browser crashes. For best results, use chunked transfers and avoid sending extremely large files on mobile.
 
-> **🔄 Updated: August 24, 2025 - Stable release with improved file transfer reliability**
+> **🔄 Updated: September 30, 2025 - Latest version with enhanced UI and performance optimizations**
 
-[🚀 Live Demo](https://transmitflow.com) • [📖 Documentation](https://github.com/10neWOlF/transmitflow/wiki) • [🐛 Report Bug](https://github.com/10neWOlF/transmitflow/issues) • [✨ Request Feature](https://github.com/10neWOlF/transmitflow/issues)
+[🚀 Live Demo](https://transmitflow.vercel.app) • [📖 Documentation](https://github.com/shubhampardule/transmitflow/wiki) • [🐛 Report Bug](https://github.com/shubhampardule/transmitflow/issues) • [✨ Request Feature](https://github.com/shubhampardule/transmitflow/issues)
 
 > **Deployed on Vercel for fast, global delivery.**
 </div>
@@ -84,6 +84,22 @@
 - 📋 **One-Click Sharing**: Share connection links via clipboard or QR scan
 - 🔗 **Smart URLs**: Direct links for easy sharing across messaging apps
 
+### 🌟 **Current Version Highlights (v0.1.0)**
+
+**✅ Enhanced User Experience**
+- 🚀 **Next.js 15.4.6 + React 19**: Latest performance optimizations
+- 🎨 **shadcn/ui Components**: Modern, accessible design system
+- 📱 **Advanced QR Scanning**: `@yudiel/react-qr-scanner` for reliable scanning
+- ⚡ **Turbopack Integration**: Lightning-fast development builds
+- 📊 **Analytics Integration**: Vercel Analytics & Speed Insights
+
+**✅ Technical Improvements**
+- 🔄 **Enhanced WebRTC**: Multi-TURN server failover support
+- 🌐 **Production-Ready Signaling**: Hosted signaling server with global reach
+- 🛡️ **TypeScript 5+**: Advanced type safety and developer experience
+- 📱 **Mobile Optimization**: Touch-friendly interface with responsive design
+- 🔧 **Environment Configuration**: Flexible TURN/STUN server setup
+
 ### 🛡️ **Security & Privacy**
 - 🔒 **End-to-End Transfer**: Direct peer-to-peer connection with no middleman
 - 🚫 **No Data Storage**: Files are never stored on servers - ever
@@ -110,26 +126,29 @@
 ### 📋 Prerequisites
 - Node.js 18+ ([Download here](https://nodejs.org/))
 - npm, yarn, or pnpm
-- Modern browser with WebRTC support
+- Modern browser with WebRTC support (Chrome, Firefox, Safari, Edge)
 
 ### ⚡ Installation
 
 ```bash
 # 1️⃣ Clone the repository
-git clone https://github.com/10neWOlF/transmitflow.git
+git clone https://github.com/shubhampardule/transmitflow.git
 cd transmitflow
 
 # 2️⃣ Install dependencies
 npm install
 
-# 3️⃣ Open a new terminal and run backend server
-node server.js
+# 3️⃣ Set up environment variables
+# Copy .env.example to .env and configure your signaling server
+cp .env.example .env
 
-# 4️⃣ In the first terminal, start development server
+# 4️⃣ Start development server with Turbopack (faster builds)
 npm run dev
 
 # 🎉 Open http://localhost:3000 and start sharing!
 ```
+
+> **Note**: The signaling server is already hosted for you. The app will work immediately for development and production.
 
 ### 🏗️ Production Deployment
 
@@ -253,12 +272,14 @@ graph LR
 
 | Layer | Technology | Purpose |
 |:------|:-----------|:--------|
-| 🎨 **Frontend** | Next.js 15 + React 19 | Modern web framework with latest features |
-| 📱 **UI/UX** | Tailwind CSS + Radix UI | Beautiful, accessible, responsive design |
+| 🎨 **Frontend** | Next.js 15.4.6 + React 19 | Latest web framework with React 19 concurrent features |
+| 📱 **UI/UX** | Tailwind CSS + shadcn/ui | Modern design system with accessible components |
 | 🔗 **P2P Engine** | WebRTC Data Channels | Direct peer-to-peer file transfer |
-| 🌐 **Signaling** | Socket.IO + Express.js | Real-time connection coordination |
-| 🛡️ **Type Safety** | TypeScript | Rock-solid code with compile-time checks |
-| 🎯 **State Management** | React Hooks | Simple, efficient state handling |
+| 🌐 **Signaling** | Socket.IO 4.8.1 + Express 5.1.0 | Real-time connection coordination |
+| 🛡️ **Type Safety** | TypeScript 5+ | Rock-solid code with compile-time checks |
+| 🎯 **State Management** | React 19 Hooks | Efficient state handling with latest React features |
+| 📊 **Analytics** | Vercel Analytics & Speed Insights | Performance monitoring and user analytics |
+| 🔍 **QR Scanning** | @yudiel/react-qr-scanner | Modern QR code scanning capabilities |
 
 </div>
 
@@ -271,37 +292,50 @@ p2p-react/
 │   ├── 📱 app/                    # Next.js 15 App Router
 │   │   ├── layout.tsx             # Root layout with providers
 │   │   ├── page.tsx               # Main application page
-│   │   └── globals.css            # Global styles
+│   │   ├── globals.css            # Global styles & Tailwind
+│   │   └── *.ico, *.svg          # App icons and assets
 │   │
 │   ├── 🧩 components/             # React components
-│   │   ├── 🎨 ui/                 # Reusable UI primitives
+│   │   ├── 🎨 ui/                 # shadcn/ui components
 │   │   │   ├── button.tsx         # Button component
 │   │   │   ├── card.tsx           # Card layouts
 │   │   │   ├── tabs.tsx           # Tab navigation
-│   │   │   └── progress.tsx       # Progress bars
+│   │   │   ├── progress.tsx       # Progress bars
+│   │   │   ├── badge.tsx          # Status badges
+│   │   │   ├── input.tsx          # Input fields
+│   │   │   ├── DelayedLoader.tsx  # Loading states
+│   │   │   ├── LoadingSpinner.tsx # Spinner component
+│   │   │   ├── ThemeToggle.tsx    # Theme switching
+│   │   │   ├── TransmitFlowLogo.tsx # Main logo
+│   │   │   └── TransmitFlowLogoOnly.tsx # Icon-only logo
 │   │   │
-│   │   ├── P2PFileTransfer.tsx    # 🔥 Main app logic
-│   │   ├── SendFilesPanel.tsx     # 📤 File upload interface
-│   │   ├── ReceiveFilesPanel.tsx  # 📥 File receive interface
-│   │   ├── TransferProgress.tsx   # 📊 Progress tracking
-│   │   └── FloatingScrollButton.tsx # Navigation helper
+│   │   ├── P2PFileTransfer.tsx    # 🔥 Main app logic & orchestration
+│   │   ├── SendFilesPanel.tsx     # 📤 File upload interface with QR generation
+│   │   ├── ReceiveFilesPanel.tsx  # 📥 File receive interface with QR scanning
+│   │   ├── TransferProgress.tsx   # 📊 Real-time progress tracking
+│   │   └── FloatingScrollButton.tsx # Smooth navigation helper
 │   │
 │   ├── 🔧 lib/                    # Core business logic
-│   │   ├── webrtc.ts              # 🌐 WebRTC P2P engine
-│   │   ├── signaling.ts           # 📡 Socket.IO client
-│   │   ├── file-utils.ts          # 📁 File handling utilities
-│   │   └── utils.ts               # 🛠️ Helper functions
+│   │   ├── webrtc.ts              # 🌐 WebRTC P2P engine with connection optimization
+│   │   ├── signaling.ts           # 📡 Socket.IO client with enhanced error handling
+│   │   ├── file-utils.ts          # 📁 File handling, chunking & validation
+│   │   └── utils.ts               # 🛠️ Helper functions & utilities
 │   │
 │   └── 📝 types/                  # TypeScript definitions
-│       └── index.ts               # Global type definitions
+│       └── index.ts               # Global type definitions & interfaces
 │
 ├── 🌍 public/                     # Static assets
-│   ├── icons/                     # App icons
-│   └── images/                    # Images and graphics
+│   ├── *.svg                      # App icons (favicon, logos, etc.)
+│   └── *.ico                      # Favicons
 │
-├── 🖥️ server.js                   # Production server
-├── 📡 signaling-server.js          # WebRTC signaling server
-└── 📦 package.json                # Dependencies and scripts
+├── � signaling-server.js          # Production signaling server with multi-TURN support
+├── � package.json                # Dependencies and scripts
+├── 🏗️ next.config.js              # Next.js configuration with image optimization
+├── 🎨 tailwind.config.js          # Tailwind CSS configuration
+├── � components.json             # shadcn/ui configuration
+├── 🚀 vercel.json                 # Vercel deployment configuration
+├── ⚙️ Procfile                    # Server deployment configuration
+└── 🌐 .env                        # Environment variables (signaling server, TURN/STUN)
 ```
 
 </details>
@@ -334,20 +368,25 @@ p2p-react/
 <tr>
 <td width="50%">
 
-#### **📱 UI Components**
-- **SendFilesPanel**: Drag & drop with preview
-- **ReceiveFilesPanel**: QR scanner & room joining
-- **TransferProgress**: Live progress monitoring
-- **Smart Navigation**: Browser history management
+#### **📱 Enhanced UI Components**
+- **SendFilesPanel**: Drag & drop with live preview and QR generation
+- **ReceiveFilesPanel**: Advanced QR scanner with auto-connect
+- **TransferProgress**: Real-time progress with individual file management
+- **DelayedLoader**: Smooth loading states with optimized UX
+- **FloatingScrollButton**: Smart navigation with scroll detection
+- **ThemeToggle**: Dark/light mode switching (if implemented)
+- **TransmitFlowLogo**: Branded logo components for consistent UI
 
 </td>
 <td width="50%">
 
-#### **🛠️ Utilities**
-- **File Processing**: Chunking, validation, metadata
-- **QR Code Generation**: Dynamic link creation
-- **Error Handling**: Graceful failure management
-- **Performance**: Optimized for large files
+#### **🛠️ Enhanced Utilities**
+- **File Processing**: Advanced chunking, validation & metadata extraction
+- **QR Code Generation**: Dynamic QR codes with error correction
+- **Error Handling**: Comprehensive error management & recovery
+- **Performance**: Optimized for large files with memory management
+- **Analytics Integration**: Vercel Analytics & Speed Insights
+- **Environment Configuration**: Multi-environment support with TURN/STUN servers
 
 </td>
 </tr>
@@ -442,46 +481,97 @@ p2p-react/
 
 </div>
 
-## 🌟 Advanced Features
+### 🔧 **Development Environment**
 
-### **Smart Navigation**
-- Browser back button returns to previous app state
-- URL state management for sharing links
-- Prevents accidental navigation during transfers
+**🛠️ Setup Details**
+- **Package Manager**: npm (with lockfile for reproducible builds)
+- **Bundler**: Next.js with Turbopack for development
+- **Code Quality**: ESLint 9 with Next.js configuration
+- **Styling**: Tailwind CSS 3.4.17 with PostCSS 8.4.49
+- **Type Checking**: TypeScript 5+ with strict mode
+- **UI Components**: shadcn/ui with "new-york" style preset
 
-### **Transfer Management**
-- Individual file cancellation
-- Batch transfer operations
-- Connection state monitoring
-- Automatic retry mechanisms
+**🚀 Key Dependencies**
+- `next`: 15.4.6 (App Router + Turbopack)
+- `react`: 19.1.0 (Latest with concurrent features)
+- `typescript`: 5+ (Advanced type safety)
+- `socket.io-client`: 4.8.1 (Real-time communication)
+- `@yudiel/react-qr-scanner`: 2.3.1 (QR scanning)
+- `@vercel/analytics`: 1.5.0 (Performance monitoring)
 
-### **Responsive Design**
-- Mobile-optimized interface
-- Touch-friendly interactions
-- Adaptive layouts for all screen sizes
-- Cross-platform consistency
+## � Troubleshooting
+
+### **Common Issues & Solutions**
+
+| 🚨 **Issue** | 🔧 **Solution** |
+|:-------------|:----------------|
+| **Files won't transfer** | Check if both devices are on the same network or if firewall is blocking WebRTC |
+| **QR code won't scan** | Ensure camera permissions are granted and try manual room code entry |
+| **Large files fail** | Use smaller file sizes on mobile devices due to memory limitations |
+| **Connection timeout** | Try refreshing both devices and ensure stable internet connection |
+| **Slow transfer speeds** | Connect devices to same WiFi network for optimal performance |
+
+### **Browser Compatibility**
+- ✅ **Chrome/Chromium 90+**: Full support
+- ✅ **Firefox 88+**: Full support  
+- ✅ **Safari 14+**: Full support
+- ✅ **Edge 90+**: Full support
+- ❓ **Mobile browsers**: Generally supported, may have memory limitations
+
+### **Performance Tips**
+- Use WiFi instead of mobile data for faster transfers
+- Keep file sizes reasonable on mobile devices (under 100MB recommended)
+- Close other tabs/apps during large transfers
+- Ensure both devices have sufficient battery
 
 ## 🚀 Deployment
 
 ### **Development**
 ```bash
+# Start development server with Turbopack
 npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build locally
+npm start
 ```
 
-### **Production (Vercel)**
+### **Production (Vercel - Recommended)**
 ```bash
-# Deploy to Vercel
+# Deploy to Vercel with one command
 vercel --prod
+
+# Or deploy via GitHub integration
+# Just push to main branch and Vercel auto-deploys
+```
+
+### **Environment Variables**
+Create a `.env` file with your configuration:
+```env
+NEXT_PUBLIC_SIGNALING_SERVER_URL=https://your-signaling-server.com
+NEXT_PUBLIC_TURN_URL=turn:your-turn-server.com:3478
+NEXT_PUBLIC_TURN_USER=your-username
+NEXT_PUBLIC_TURN_PASS=your-password
+NEXT_PUBLIC_STUN_URL=stun:your-stun-server.com:3478
+NODE_ENV=production
 ```
 
 ### **Self-Hosting**
 ```bash
+# Clone and setup
+git clone https://github.com/shubhampardule/transmitflow.git
+cd transmitflow
+npm install
+
 # Build and start
 npm run build
 npm start
 
-# Or use PM2
-pm2 start ecosystem.config.js
+# Or use PM2 for production
+npm install -g pm2
+pm2 start npm --name "transmitflow" -- start
 ```
 
 ## 🤝 Contributing
@@ -490,9 +580,9 @@ pm2 start ecosystem.config.js
 
 **We ❤️ contributions! Join our community of developers making file sharing better for everyone.**
 
-[![Contributors](https://img.shields.io/github/contributors/10neWOlF/transmitflow?style=for-the-badge)](https://github.com/10neWOlF/transmitflow/graphs/contributors)
-[![Forks](https://img.shields.io/github/forks/10neWOlF/transmitflow?style=for-the-badge)](https://github.com/10neWOlF/transmitflow/network/members)
-[![Stars](https://img.shields.io/github/stars/10neWOlF/transmitflow?style=for-the-badge)](https://github.com/10neWOlF/transmitflow/stargazers)
+[![Contributors](https://img.shields.io/github/contributors/shubhampardule/transmitflow?style=for-the-badge)](https://github.com/shubhampardule/transmitflow/graphs/contributors)
+[![Forks](https://img.shields.io/github/forks/shubhampardule/transmitflow?style=for-the-badge)](https://github.com/shubhampardule/transmitflow/network/members)
+[![Stars](https://img.shields.io/github/stars/shubhampardule/transmitflow?style=for-the-badge)](https://github.com/shubhampardule/transmitflow/stargazers)
 
 </div>
 
@@ -586,8 +676,9 @@ All contributors get:
 ### 🤗 **Get Help & Connect**
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-7289da?style=for-the-badge&logo=discord)](https://discord.gg/your-discord)
-[![GitHub Discussions](https://img.shields.io/badge/GitHub-Discussions-green?style=for-the-badge&logo=github)](https://github.com/10neWOlF/transmitflow/discussions)
-[![Documentation](https://img.shields.io/badge/Docs-Read-blue?style=for-the-badge&logo=gitbook)](https://github.com/10neWOlF/transmitflow/wiki)
+[![GitHub Discussions](https://img.shields.io/badge/GitHub-Discussions-green?style=for-the-badge&logo=github)](https://github.com/shubhampardule/transmitflow/discussions)
+[![Documentation](https://img.shields.io/badge/Docs-Read-blue?style=for-the-badge&logo=gitbook)](https://github.com/shubhampardule/transmitflow/wiki)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support%20Development-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/shubhampardule)
 
 </div>
 
@@ -595,11 +686,11 @@ All contributors get:
 
 | 💭 **Type** | 🔗 **Where to Go** | ⏱️ **Response Time** |
 |:------------|:-------------------|:---------------------|
-| 🐛 **Bug Reports** | [GitHub Issues](https://github.com/10neWOlF/transmitflow/issues) | Usually within 24 hours |
-| 💡 **Feature Requests** | [GitHub Issues](https://github.com/10neWOlF/transmitflow/issues) | Weekly review cycle |
-| ❓ **Questions** | [GitHub Discussions](https://github.com/10neWOlF/transmitflow/discussions) | Community-powered |
+| 🐛 **Bug Reports** | [GitHub Issues](https://github.com/shubhampardule/transmitflow/issues) | Usually within 24 hours |
+| 💡 **Feature Requests** | [GitHub Issues](https://github.com/shubhampardule/transmitflow/issues) | Weekly review cycle |
+| ❓ **Questions** | [GitHub Discussions](https://github.com/shubhampardule/transmitflow/discussions) | Community-powered |
 | 💬 **Chat** | [Discord Server](https://discord.gg/your-discord) | Real-time |
-| 📖 **Documentation** | [Project Wiki](https://github.com/10neWOlF/transmitflow/wiki) | Always available |
+| 📖 **Documentation** | [Project Wiki](https://github.com/shubhampardule/transmitflow/wiki) | Always available |
 
 ### 🌟 **Show Your Support**
 
@@ -607,8 +698,9 @@ All contributors get:
 
 **If this project helped you, consider:**
 
-[![Star on GitHub](https://img.shields.io/badge/⭐-Star%20on%20GitHub-yellow?style=for-the-badge)](https://github.com/10neWOlF/transmitflow)
-[![Share on Twitter](https://img.shields.io/badge/🐦-Share%20on%20Twitter-1da1f2?style=for-the-badge)](https://twitter.com/intent/tweet?text=Check%20out%20this%20awesome%20P2P%20file%20transfer%20app!&url=https://github.com/10neWOlF/transmitflow&via=ShubhamPardule)
+[![Star on GitHub](https://img.shields.io/badge/⭐-Star%20on%20GitHub-yellow?style=for-the-badge)](https://github.com/shubhampardule/transmitflow)
+[![Buy Me A Coffee](https://img.shields.io/badge/☕-Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/shubhampardule)
+[![Share on Twitter](https://img.shields.io/badge/🐦-Share%20on%20Twitter-1da1f2?style=for-the-badge)](https://twitter.com/intent/tweet?text=Check%20out%20this%20awesome%20P2P%20file%20transfer%20app!&url=https://github.com/shubhampardule/transmitflow&via=ShubhamPardule)
 
 </div>
 
@@ -635,15 +727,19 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 </div>
 
 - 🌐 **[WebRTC](https://webrtc.org/)** - For enabling peer-to-peer magic
-- ⚛️ **[Next.js](https://nextjs.org/)** - The React framework that makes everything possible
+- ⚛️ **[Next.js 15](https://nextjs.org/)** - The React framework with App Router and Turbopack
 - 🎨 **[Tailwind CSS](https://tailwindcss.com/)** - For beautiful, responsive styling
-- 🧩 **[Radix UI](https://www.radix-ui.com/)** - For accessible, unstyled components
+- 🧩 **[shadcn/ui](https://ui.shadcn.com/)** - For modern, accessible component library
 - 📡 **[Socket.IO](https://socket.io/)** - For real-time signaling communication
-- 📱 **[QR Code Libraries](https://github.com/soldair/node-qrcode)** - For seamless device pairing
+- 📱 **[@yudiel/react-qr-scanner](https://github.com/yudielcurbelo/react-qr-scanner)** - For advanced QR code scanning
+- 🔍 **[QRCode](https://github.com/soldair/node-qrcode)** - For QR code generation
+- 📊 **[Vercel Analytics](https://vercel.com/analytics)** - For performance monitoring
+- 🔔 **[Sonner](https://sonner.emilkowal.ski/)** - For beautiful toast notifications
+- ⚡ **[Lucide React](https://lucide.dev/)** - For consistent, beautiful icons
 
 ### 💝 **Special Thanks**
 
-- All our amazing [contributors](https://github.com/10neWOlF/transmitflow/graphs/contributors)
+- All our amazing [contributors](https://github.com/shubhampardule/transmitflow/graphs/contributors)
 - The open-source community for continuous inspiration
 - Everyone who provided feedback and suggestions
 
@@ -651,9 +747,9 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 <div align="center">
 
-**[⭐ Star this repo](https://github.com/10neWOlF/transmitflow)** if you find it useful!
+**[⭐ Star this repo](https://github.com/shubhampardule/transmitflow)** if you find it useful!
 
-**Made with ❤️ by [10neWOlF](https://github.com/10neWOlF)**
+**Made with ❤️ by [shubhampardule](https://github.com/shubhampardule)**
 
 ### 🚀 *Share files freely, privately, and instantly!*
 
