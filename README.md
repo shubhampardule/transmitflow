@@ -55,19 +55,41 @@
 ### 🛠️ **Developer Friendly**
 - **Modern Tech Stack** - Next.js 15, React 19, TypeScript
 - **Clean Architecture** - Well-documented, maintainable code
-- **Open Source** - MIT licensed, community-driven
+- **Open Source** - CC BY-NC 4.0 licensed, community-driven
 
 </td>
 </tr>
 </table>
 
-## ✨ Feature
+## ✨ Features & Screenshots
 
 <div align="center">
 
-![Feature Demo: P2P File Transfer in Action](https://via.placeholder.com/800x400/0066cc/ffffff?text=🚀+P2P+File+Transfer+Demo)
+### 📱 **App in Action - Dark & Light Themes**
 
-*Share files instantly with just a QR code scan!*
+<table>
+<tr>
+<td width="50%" align="center">
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-1.png" alt="TransmitFlow - Send & Receive Interface" width="100%"/>
+<br/>
+<em>🌙 Dark Mode: Send & Receive Interface</em>
+</td>
+<td width="50%" align="center">
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-3.png" alt="TransmitFlow - File Selection & Features" width="100%"/>
+<br/>
+<em>☀️ Light Mode: File Selection & App Features</em>
+</td>
+</tr>
+<tr>
+<td colspan="2" align="center">
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-2.png" alt="TransmitFlow - Transfer Progress" width="70%"/>
+<br/>
+<em>� Real-time Transfer Progress with File Management</em>
+</td>
+</tr>
+</table>
+
+*Share files instantly with beautiful, responsive interface on any device!*
 
 </div>
 
@@ -263,6 +285,42 @@ graph LR
 | 🐌 Limited by server bandwidth | | ⚡ Full network speed |
 | 🔓 Files stored on servers | | 🔒 Complete privacy |
 | 📊 Data harvesting possible | | 🚫 No data collection |
+
+## 📸 User Journey Screenshots
+
+<div align="center">
+
+### **🎯 Complete File Transfer Experience**
+
+<table>
+<tr>
+<td width="33%" align="center">
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-3.png" alt="Step 1: File Selection" width="100%"/>
+<br/>
+<strong>1️⃣ Select Files</strong>
+<br/>
+<em>Choose files with drag & drop interface</em>
+</td>
+<td width="33%" align="center">
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-1.png" alt="Step 2: Connection Setup" width="100%"/>
+<br/>
+<strong>2️⃣ Generate QR & Connect</strong>
+<br/>
+<em>Share QR code or room link</em>
+</td>
+<td width="33%" align="center">
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-2.png" alt="Step 3: Transfer Progress" width="100%"/>
+<br/>
+<strong>3️⃣ Monitor Progress</strong>
+<br/>
+<em>Real-time transfer with file management</em>
+</td>
+</tr>
+</table>
+
+**🌓 Seamless Dark/Light Theme Support** • **📱 Responsive on All Devices** • **🚀 Lightning Fast Transfers**
+
+</div>
 
 ## 🛠️ Tech Stack & Architecture
 
@@ -710,9 +768,19 @@ All contributors get:
 
 <div align="center">
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)** - see the [LICENSE](LICENSE) file for details.
 
-**TL;DR**: You can use this project for anything you want, including commercial use, as long as you include the original license.
+**TL;DR**: You can use, share, and modify this project for **non-commercial purposes only**, as long as you provide attribution to the original author.
+
+**✅ Allowed:**
+- Personal use
+- Educational use
+- Sharing and redistribution
+- Modifications and adaptations
+
+**❌ Not Allowed:**
+- Commercial use
+- Selling or monetizing the software
 
 </div>
 
