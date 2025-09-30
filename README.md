@@ -70,19 +70,19 @@
 <table>
 <tr>
 <td width="50%" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-1.png" alt="TransmitFlow - Send & Receive Interface" width="100%"/>
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Send.png" alt="TransmitFlow - Send & Receive Interface" width="100%"/>
 <br/>
 <em>🌙 Dark Mode: Send & Receive Interface</em>
 </td>
 <td width="50%" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-3.png" alt="TransmitFlow - File Selection & Features" width="100%"/>
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Receive.png" alt="TransmitFlow - File Selection & Features" width="100%"/>
 <br/>
 <em>☀️ Light Mode: File Selection & App Features</em>
 </td>
 </tr>
 <tr>
 <td colspan="2" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-2.png" alt="TransmitFlow - Transfer Progress" width="70%"/>
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Transfering.png" alt="TransmitFlow - Transfer Progress" width="70%"/>
 <br/>
 <em>� Real-time Transfer Progress with File Management</em>
 </td>
@@ -295,25 +295,25 @@ graph LR
 <table>
 <tr>
 <td width="33%" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-3.png" alt="Step 1: File Selection" width="100%"/>
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Send.png" alt="Step 1: Send Files Interface" width="100%"/>
 <br/>
-<strong>1️⃣ Select Files</strong>
+<strong>1️⃣ Send Files</strong>
 <br/>
-<em>Choose files with drag & drop interface</em>
+<em>Choose files and generate QR code</em>
 </td>
 <td width="33%" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-1.png" alt="Step 2: Connection Setup" width="100%"/>
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Receive.png" alt="Step 2: Receive Files Interface" width="100%"/>
 <br/>
-<strong>2️⃣ Generate QR & Connect</strong>
+<strong>2️⃣ Receive Files</strong>
 <br/>
-<em>Share QR code or room link</em>
+<em>Scan QR code or enter room code</em>
 </td>
 <td width="33%" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/mockup-2.png" alt="Step 3: Transfer Progress" width="100%"/>
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Transfering.png" alt="Step 3: Transfer Progress" width="100%"/>
 <br/>
-<strong>3️⃣ Monitor Progress</strong>
+<strong>3️⃣ Transfer Progress</strong>
 <br/>
-<em>Real-time transfer with file management</em>
+<em>Monitor real-time file transfer</em>
 </td>
 </tr>
 </table>
