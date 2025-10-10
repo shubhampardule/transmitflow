@@ -200,23 +200,6 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
 
   return (
     <div className="space-y-4 md:space-y-6 animate-in fade-in duration-300">
-      {/* Header section - hidden on mobile, visible on desktop */}
-      <Card className="hidden md:block bg-gradient-to-br from-background to-muted/20">
-        <CardContent className="p-4">
-          <div className="text-center space-y-2">
-            <div className="p-2 mx-auto w-fit rounded-full bg-primary/10">
-              <Download className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold">Receive Files</h3>
-              <p className="text-xs text-muted-foreground">
-                Enter the room code or scan QR code to connect
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Mobile-optimized layout - single section for mobile, two columns for desktop */}
       <div className="md:grid md:grid-cols-2 md:gap-4">
         {/* Single card for mobile, split into two for desktop */}
