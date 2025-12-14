@@ -21,7 +21,7 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "lucide-react": "^0.539.0",
-    "next": "15.4.6",
+    "next": "15.4.10",
     "postcss": "^8.4.49",
     "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",
