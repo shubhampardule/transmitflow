@@ -168,6 +168,13 @@ export default function TransferProgress({
           description: 'All files transferred successfully',
           color: 'green'
         };
+      case 'cancelled':
+        return {
+          icon: <XCircle className="h-6 w-6 text-amber-500" />,
+          title: 'Transfer Cancelled',
+          description: transferState.error || 'The transfer was cancelled',
+          color: 'amber'
+        };
       case 'error':
         return {
           icon: <XCircle className="h-6 w-6 text-red-500" />,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,6 +38,11 @@ export default function P2PFileTransfer() {
   const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
   const [hasNavigatedToSharing, setHasNavigatedToSharing] = useState(false);
   const [transferCompleted, setTransferCompleted] = useState(false);
+  const transferStatusRef = useRef<TransferState['status']>('idle');
+
+  useEffect(() => {
+    transferStatusRef.current = transferState.status;
+  }, [transferState.status]);
 
   // Define handleReset first since other functions depend on it
   const handleReset = useCallback(() => {
@@ -146,6 +151,46 @@ export default function P2PFileTransfer() {
       handleReset();
     });
 
+    signalingService.onTransferStarted(() => {
+      if (transferStatusRef.current === 'connecting') {
+        setTransferState(prev => ({ ...prev, status: 'transferring' }));
+      }
+      toast.info('Transfer started');
+    });
+
+    signalingService.onTransferCompleted((data) => {
+      if (transferStatusRef.current === 'completed' || transferStatusRef.current === 'cancelled') {
+        return;
+      }
+
+      if (transferStatusRef.current !== 'error') {
+        setTransferCompleted(true);
+        setTransferState(prev => ({ ...prev, status: 'completed' }));
+      }
+
+      const durationText = data.duration ? ` in ${Math.round(data.duration)}s` : '';
+      toast.success(`Transfer session completed${durationText}`);
+    });
+
+    signalingService.onTransferCancelled((data) => {
+      if (transferStatusRef.current === 'completed' || transferStatusRef.current === 'cancelled') {
+        return;
+      }
+
+      const raw = data.cancelledBy;
+      const cancelledBy: 'sender' | 'receiver' | 'system' =
+        raw === 'sender' || raw === 'receiver' || raw === 'system' ? raw : 'system';
+      const reasonSuffix = data.reason ? ` (${data.reason})` : '';
+
+      setTransferState(prev => ({
+        ...prev,
+        status: 'cancelled',
+        error: `Transfer cancelled by ${cancelledBy}${reasonSuffix}`,
+      }));
+
+      toast.warning(`Transfer cancelled by ${cancelledBy}${reasonSuffix}`);
+    });
+
     return () => {
       webrtcService.cleanup();
       signalingService.disconnect();
@@ -197,15 +242,25 @@ export default function P2PFileTransfer() {
     webrtcService.onConnectionStateChange = (state) => {
       console.log('WebRTC connection state:', state);
       if (state === 'connected') {
-        setTransferState(prev => ({ ...prev, status: 'connecting' }));
+        setTransferState(prev => {
+          if (prev.status === 'cancelled' || prev.status === 'completed') {
+            return prev;
+          }
+          return { ...prev, status: 'connecting' };
+        });
       } else if (state === 'failed') {
-        setTransferState(prev => ({ ...prev, status: 'error', error: 'Connection failed' }));
+        setTransferState(prev => {
+          if (prev.status === 'cancelled' || prev.status === 'completed') {
+            return prev;
+          }
+          return { ...prev, status: 'error', error: 'Connection failed' };
+        });
       } else if (state === 'disconnected') {
-        // Only treat disconnection as error if transfer wasn't completed successfully
-        if (!transferCompleted) {
+        // Ignore expected disconnects after terminal states
+        if (!transferCompleted && transferStatusRef.current !== 'cancelled') {
           setTransferState(prev => ({ ...prev, status: 'error', error: 'Connection failed' }));
         } else {
-          console.log('✅ Connection closed after successful transfer - maintaining completed status');
+          console.log('✅ Connection closed after successful/cancelled transfer');
         }
       }
     };
@@ -275,16 +330,22 @@ export default function P2PFileTransfer() {
     };
 
     webrtcService.onTransferComplete = () => {
+      if (transferStatusRef.current === 'completed') {
+        return;
+      }
       setTransferCompleted(true);
       setTransferState(prev => ({ ...prev, status: 'completed' }));
       toast.success('Transfer completed successfully!');
     };
 
     webrtcService.onTransferCancelled = (cancelledBy) => {
+      if (transferStatusRef.current === 'completed' || transferStatusRef.current === 'cancelled') {
+        return;
+      }
       toast.warning(`Transfer cancelled by ${cancelledBy}`);
       setTransferState(prev => ({ 
         ...prev, 
-        status: 'error',
+        status: 'cancelled',
         error: `Transfer cancelled by ${cancelledBy}`
       }));
     };
@@ -312,6 +373,10 @@ export default function P2PFileTransfer() {
     };
 
     webrtcService.onError = (error) => {
+      if (transferStatusRef.current === 'cancelled' || transferStatusRef.current === 'completed') {
+        console.log('Ignoring post-terminal error:', error);
+        return;
+      }
       toast.error(error);
       setTransferState(prev => ({ ...prev, status: 'error', error }));
     };
@@ -406,15 +471,15 @@ export default function P2PFileTransfer() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     try {
-      console.log('Joining room:', code);
-      signalingService.joinRoom(code);
-      
-      // Wait for peer to join
+      // Register listener before joining to avoid missing fast peer-joined events
       signalingService.onPeerJoined(async (peerId) => {
         console.log('Peer joined:', peerId);
         toast.success('Receiver connected! Starting transfer...');
         await webrtcService.initializeAsSender(code, files);
       });
+
+      console.log('Joining room:', code);
+      signalingService.joinRoom(code);
 
     } catch (error) {
       console.error('Failed to initialize sender:', error);

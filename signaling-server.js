@@ -259,6 +259,12 @@ io.on('connection', (socket) => {
     console.log(`${socket.id} (${role}) joining room: ${roomId} from ${country}`);
     
     let room = rooms.get(roomId);
+
+    // Reject joins while an active transfer is in progress in this room
+    if (room && room.transferInProgress) {
+      socket.emit('room-busy', { room: roomId });
+      return;
+    }
     
     if (room && room.participants.size >= MAX_ROOM_SIZE) {
       socket.emit('room-full', { room: roomId });
@@ -567,6 +573,28 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('transfer-cancel', (data) => {
+    const roomId = typeof data === 'string' ? data : data.roomId;
+    const cancelledBy = (typeof data === 'object' && data.cancelledBy) || socket.role || 'unknown';
+    const reason = typeof data === 'object' ? data.reason : undefined;
+    if (!roomId) return;
+    const room = rooms.get(roomId);
+
+    if (room) {
+      room.transferInProgress = false;
+      room.lastActivity = Date.now();
+    }
+
+    console.log(`Transfer cancelled in room ${roomId} by ${cancelledBy}${reason ? ` (${reason})` : ''}`);
+
+    socket.to(roomId).emit('transfer-cancelled', {
+      from: socket.id,
+      cancelledBy,
+      reason: reason || null,
+      at: Date.now()
+    });
+  });
+
   socket.on('request-troubleshooting', (roomId) => {
     const room = rooms.get(roomId);
     const issues = connectionIssues.get(roomId);
@@ -643,6 +671,12 @@ io.on('connection', (socket) => {
         
         room.participants.delete(socket.id);
         room.participantDetails.delete(socket.id);
+
+        // Reset transfer state when one peer leaves mid-transfer
+        if (room.transferInProgress && room.participants.size < 2) {
+          room.transferInProgress = false;
+          room.lastActivity = Date.now();
+        }
         
         if (room.participants.size === 0) {
           cleanup(socket.roomId);

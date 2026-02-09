@@ -11,6 +11,7 @@ interface DelayedLoaderProps {
 
 export default function DelayedLoader({ children, minimumLoadTime = 1500 }: DelayedLoaderProps) {
   const [isLoading, setIsLoading] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'failed'>('connecting');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [minimumTimeElapsed, setMinimumTimeElapsed] = useState(false);
@@ -36,7 +37,7 @@ export default function DelayedLoader({ children, minimumLoadTime = 1500 }: Dela
         console.log('Successfully connected to signaling server');
         setConnectionStatus('connected');
         
-        // Give users time to see "✓ All set!" message (at least 400ms)
+        // Give users time to see "All set!" message (at least 400ms)
         await new Promise(resolve => setTimeout(resolve, 400));
         
         setConnectionResolved(true);
@@ -62,13 +63,26 @@ export default function DelayedLoader({ children, minimumLoadTime = 1500 }: Dela
   // Effect to hide loading when both conditions are met
   useEffect(() => {
     if (minimumTimeElapsed && connectionResolved) {
-      setIsLoading(false);
+      setIsExiting(true);
+      const exitTimer = setTimeout(() => {
+        setIsLoading(false);
+      }, 260);
+
+      return () => {
+        clearTimeout(exitTimer);
+      };
     }
   }, [minimumTimeElapsed, connectionResolved]);
 
   // Show loading spinner while connecting or during minimum time
   if (isLoading) {
-    return <LoadingSpinner connectionStatus={connectionStatus} errorMessage={errorMessage} />;
+    return (
+      <LoadingSpinner
+        connectionStatus={connectionStatus}
+        errorMessage={errorMessage}
+        isExiting={isExiting}
+      />
+    );
   }
 
   // Show content after connection is established and minimum time has passed

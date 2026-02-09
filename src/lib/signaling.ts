@@ -4,6 +4,27 @@ import { SignalingMessage } from '@/types';
 class SignalingService {
   private socket: Socket | null = null;
   private serverUrl: string = '';
+  private signalListeners: {
+    offer?: (data: { offer: RTCSessionDescriptionInit; from?: string }) => void;
+    answer?: (data: { answer: RTCSessionDescriptionInit; from?: string }) => void;
+    ice?: (data: { candidate: RTCIceCandidateInit; from?: string }) => void;
+  } = {};
+
+  private removeSignalListeners(): void {
+    if (!this.socket) return;
+
+    if (this.signalListeners.offer) {
+      this.socket.off('webrtc-offer', this.signalListeners.offer);
+    }
+    if (this.signalListeners.answer) {
+      this.socket.off('webrtc-answer', this.signalListeners.answer);
+    }
+    if (this.signalListeners.ice) {
+      this.socket.off('webrtc-ice-candidate', this.signalListeners.ice);
+    }
+
+    this.signalListeners = {};
+  }
 
   connect(serverUrl?: string): Promise<Socket> {
     return new Promise((resolve, reject) => {
@@ -16,6 +37,7 @@ class SignalingService {
 
       // Disconnect existing socket if any
       if (this.socket) {
+        this.removeSignalListeners();
         this.socket.disconnect();
       }
 
@@ -93,6 +115,7 @@ class SignalingService {
 
   disconnect(): void {
     if (this.socket) {
+      this.removeSignalListeners();
       this.socket.disconnect();
       this.socket = null;
     }
@@ -134,40 +157,105 @@ class SignalingService {
     }
   }
 
+  emitTransferStart(roomCode: string): void {
+    if (this.socket) {
+      this.socket.emit('transfer-start', { roomId: roomCode });
+    }
+  }
+
+  emitTransferComplete(roomCode: string, totalBytes?: number): void {
+    if (this.socket) {
+      this.socket.emit('transfer-complete', { roomId: roomCode, totalBytes: totalBytes || 0 });
+    }
+  }
+
+  emitTransferCancel(
+    roomCode: string,
+    cancelledBy: 'sender' | 'receiver' | 'system' = 'system',
+    reason?: string,
+  ): void {
+    if (this.socket) {
+      this.socket.emit('transfer-cancel', { roomId: roomCode, cancelledBy, reason });
+    }
+  }
+
   onRoomFull(callback: (data: { room: string }) => void): void {
     if (this.socket) {
+      this.socket.off('room-full');
       this.socket.on('room-full', callback);
     }
   }
 
   onRoomBusy(callback: (data: { room: string }) => void): void {
     if (this.socket) {
+      this.socket.off('room-busy');
       this.socket.on('room-busy', callback);
     }
   }
 
   onRoomExpired(callback: () => void): void {
     if (this.socket) {
+      this.socket.off('room-expired');
       this.socket.on('room-expired', callback);
     }
   }
 
   onPeerJoined(callback: (peerId: string) => void): void {
     if (this.socket) {
-      this.socket.on('peer-joined', callback);
+      this.socket.off('peer-joined');
+      this.socket.on('peer-joined', (data: { peerId?: string } | string) => {
+        const peerId = typeof data === 'string' ? data : data.peerId;
+        if (peerId) callback(peerId);
+      });
     }
   }
 
   onPeerDisconnected(callback: (peerId: string) => void): void {
     if (this.socket) {
-      this.socket.on('peer-disconnected', callback);
+      this.socket.off('peer-disconnected');
+      this.socket.on('peer-disconnected', (data: { peerId?: string } | string) => {
+        const peerId = typeof data === 'string' ? data : data.peerId;
+        if (peerId) callback(peerId);
+      });
+    }
+  }
+
+  onTransferStarted(
+    callback: (data: {
+      isLongDistance?: boolean;
+      estimatedDistance?: number;
+      adaptiveSettings?: { chunkSize?: number; bufferSize?: number; delay?: number };
+    }) => void,
+  ): void {
+    if (this.socket) {
+      this.socket.off('transfer-started');
+      this.socket.on('transfer-started', callback);
+    }
+  }
+
+  onTransferCompleted(
+    callback: (data: { duration?: number; averageSpeed?: number; wasLongDistance?: boolean }) => void,
+  ): void {
+    if (this.socket) {
+      this.socket.off('transfer-completed');
+      this.socket.on('transfer-completed', callback);
+    }
+  }
+
+  onTransferCancelled(
+    callback: (data: { from?: string; cancelledBy?: string; reason?: string | null; at?: number }) => void,
+  ): void {
+    if (this.socket) {
+      this.socket.off('transfer-cancelled');
+      this.socket.on('transfer-cancelled', callback);
     }
   }
 
   onSignal(callback: (message: SignalingMessage) => void): void {
     if (this.socket) {
-      // Listen for WebRTC offer messages
-      this.socket.on('webrtc-offer', (data) => {
+      this.removeSignalListeners();
+
+      const offerListener = (data: { offer: RTCSessionDescriptionInit; from?: string }) => {
         console.log('Received WebRTC offer:', data);
         callback({
           type: 'offer',
@@ -175,10 +263,9 @@ class SignalingService {
           fromPeer: data.from,
           toRoom: '',
         });
-      });
+      };
 
-      // Listen for WebRTC answer messages
-      this.socket.on('webrtc-answer', (data) => {
+      const answerListener = (data: { answer: RTCSessionDescriptionInit; from?: string }) => {
         console.log('Received WebRTC answer:', data);
         callback({
           type: 'answer',
@@ -186,10 +273,9 @@ class SignalingService {
           fromPeer: data.from,
           toRoom: '',
         });
-      });
+      };
 
-      // Listen for WebRTC ICE candidate messages
-      this.socket.on('webrtc-ice-candidate', (data) => {
+      const iceListener = (data: { candidate: RTCIceCandidateInit; from?: string }) => {
         console.log('Received WebRTC ICE candidate:', data);
         callback({
           type: 'ice',
@@ -197,8 +283,23 @@ class SignalingService {
           fromPeer: data.from,
           toRoom: '',
         });
-      });
+      };
+
+      this.signalListeners = {
+        offer: offerListener,
+        answer: answerListener,
+        ice: iceListener,
+      };
+
+      // Listen for WebRTC offer/answer/candidate messages
+      this.socket.on('webrtc-offer', offerListener);
+      this.socket.on('webrtc-answer', answerListener);
+      this.socket.on('webrtc-ice-candidate', iceListener);
     }
+  }
+
+  offSignal(): void {
+    this.removeSignalListeners();
   }
 
   removeAllListeners(): void {
@@ -211,6 +312,9 @@ class SignalingService {
       this.socket.off('room-full');
       this.socket.off('room-busy');
       this.socket.off('room-expired');
+      this.socket.off('transfer-started');
+      this.socket.off('transfer-completed');
+      this.socket.off('transfer-cancelled');
     }
   }
 
