@@ -31,6 +31,19 @@ const nextConfig = {
   async rewrites() {
     return []
   },
+  async headers() {
+    return [
+      {
+        source: '/sw.js',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
+    ]
+  },
   // Configure server
   env: {
     CUSTOM_KEY: 'my-value',

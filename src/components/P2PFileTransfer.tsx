@@ -25,6 +25,15 @@ const isTerminalStatus = (status: TransferStatus): status is TerminalTransferSta
   status === 'completed' || status === 'error' || status === 'cancelled'
 );
 
+const ALLOWED_STATUS_TRANSITIONS: Record<TransferStatus, TransferStatus[]> = {
+  idle: ['idle', 'connecting'],
+  connecting: ['connecting', 'transferring', 'completed', 'error', 'cancelled'],
+  transferring: ['transferring', 'completed', 'error', 'cancelled'],
+  completed: ['completed'],
+  error: ['error'],
+  cancelled: ['cancelled'],
+};
+
 const toUserFriendlyError = (error: string): string => {
   const message = error.trim();
 
@@ -42,6 +51,14 @@ const toUserFriendlyError = (error: string): string => {
 
   if (/connection failed/i.test(message)) {
     return 'Connection failed. Please retry.';
+  }
+
+  if (/timed out waiting for receiver confirmation/i.test(message)) {
+    return 'Sender did not receive final confirmation from receiver. Please retry.';
+  }
+
+  if (/completion was received before all files were finalized/i.test(message)) {
+    return 'Transfer ended before all files were finalized. Please retry.';
   }
 
   return message;
@@ -111,11 +128,8 @@ export default function P2PFileTransfer() {
 
   const updateTransferStatus = useCallback((nextStatus: TransferStatus, error?: string) => {
     setTransferState((prev) => {
-      if (isTerminalStatus(prev.status) && !isTerminalStatus(nextStatus)) {
-        return prev;
-      }
-
-      if (isTerminalStatus(prev.status) && isTerminalStatus(nextStatus) && prev.status !== nextStatus) {
+      const allowedNextStatuses = ALLOWED_STATUS_TRANSITIONS[prev.status];
+      if (!allowedNextStatuses.includes(nextStatus)) {
         return prev;
       }
 
@@ -322,6 +336,43 @@ export default function P2PFileTransfer() {
     };
   }, [finalizeTransfer, markTransferStarted]);
 
+  // Network events: keep signaling status fresh and avoid abrupt UX on mobile reconnects.
+  useEffect(() => {
+    const handleOffline = () => {
+      setIsConnected(false);
+      if (transferSessionActiveRef.current && !transferFinalizedRef.current) {
+        notifyOnce('network-offline', 'warning', 'Network connection lost. Waiting to reconnect...');
+      }
+    };
+
+    const handleOnline = () => {
+      void (async () => {
+        if (transferSessionActiveRef.current && !transferFinalizedRef.current) {
+          notifyOnce('network-online', 'info', 'Back online. Reconnecting signaling...');
+        }
+
+        try {
+          await signalingService.connect();
+          setIsConnected(true);
+          if (transferSessionActiveRef.current && !transferFinalizedRef.current) {
+            notifyOnce('network-online-restored', 'success', 'Signaling reconnected.');
+          }
+        } catch (error) {
+          setIsConnected(false);
+          console.warn('Signaling reconnect after online event failed:', error);
+        }
+      })();
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [notifyOnce]);
+
   // Handle browser back button
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -372,7 +423,9 @@ export default function P2PFileTransfer() {
 
       if (state === 'connected') {
         if (!transferFinalizedRef.current) {
-          updateTransferStatus('connecting');
+          if (transferStatusRef.current === 'idle' || transferStatusRef.current === 'connecting') {
+            updateTransferStatus('connecting');
+          }
         }
       } else if (state === 'failed') {
         finalizeTransfer('error', 'Connection failed. Please try again.', 'Connection failed.');

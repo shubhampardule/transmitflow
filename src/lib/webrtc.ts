@@ -36,6 +36,7 @@ const CONFIG = {
   CHUNK_REQUEST_BATCH_SIZE: 256,     // Limit chunk indexes per repair request
   CHUNK_REQUEST_ATTEMPTS: 3,         // Number of repair rounds before failing
   CHUNK_REQUEST_WAIT_MS: 5000,       // Wait window after each repair request
+  DISCONNECT_RECOVERY_MS: 8000,      // Grace period before treating disconnect as terminal
 };
 
 // Message types for both protocols
@@ -49,6 +50,7 @@ const MSG_TYPE = {
   CHUNK_ACK: 'CHUNK_ACK',
   CHUNK_REQUEST: 'CHUNK_REQUEST',
   TRANSFER_COMPLETE: 'TRANSFER_COMPLETE',
+  TRANSFER_COMPLETE_ACK: 'TRANSFER_COMPLETE_ACK',
   PROGRESS_SYNC: 'PROGRESS_SYNC',          // Synchronize progress between sender and receiver
   CONVERSION_PROGRESS: 'CONVERSION_PROGRESS',
   FILE_CANCEL: 'FILE_CANCEL',              // Individual file cancellation
@@ -61,6 +63,14 @@ const MSG_TYPE = {
 type TransferMethod = 'binary' | 'base64';
 type ReceiveStorageMode = 'memory' | 'indexeddb';
 type ControlMessageType = (typeof MSG_TYPE)[keyof typeof MSG_TYPE];
+type TransferLifecycleState =
+  | 'idle'
+  | 'connecting'
+  | 'transferring'
+  | 'awaiting-final-ack'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
 
 interface ControlMessage {
   type: ControlMessageType;
@@ -69,6 +79,7 @@ interface ControlMessage {
   fileSize?: number;
   fileType?: string;
   lastModified?: number;
+  fileHash?: string; // SHA-256 digest in lowercase hex
   chunkIndex?: number;
   totalChunks?: number;
   chunkSize?: number;
@@ -78,7 +89,7 @@ interface ControlMessage {
   progress?: number; // Progress percentage for sync messages
   conversionProgress?: number;
   stage?: 'converting' | 'transferring';
-  cancelledBy?: 'sender' | 'receiver';
+  cancelledBy?: 'sender' | 'receiver' | 'system';
   transferMethod?: TransferMethod;
   missingChunkIndices?: number[];
 }
@@ -93,6 +104,7 @@ interface ReceivedFileInfo {
   complete: boolean;
   transferMethod: TransferMethod;
   storageMode: ReceiveStorageMode;
+  expectedHash?: string;
 }
 
 interface SentFileProfile {
@@ -155,7 +167,7 @@ export class WebRTCService {
     conversionProgress?: number;
   }) => void;
   public onTransferComplete?: () => void;
-  public onTransferCancelled?: (cancelledBy: 'sender' | 'receiver') => void;
+  public onTransferCancelled?: (cancelledBy: 'sender' | 'receiver' | 'system') => void;
   public onFileCancelled?: (data: { fileIndex: number; fileName: string; cancelledBy: 'sender' | 'receiver' }) => void;
   public onError?: (error: string) => void;
   public onStatusMessage?: (message: string) => void;
@@ -188,12 +200,146 @@ export class WebRTCService {
   private readonly chunkStore = new IndexedDbChunkStore();
   private pendingChunkWrites = new Map<number, Promise<void>>();
   private pendingChunkResends = new Map<number, Promise<void>>();
+  private fileHashCache = new Map<number, string>();
+  private lifecycleState: TransferLifecycleState = 'idle';
+  private completionAckTimeout: NodeJS.Timeout | null = null;
+  private disconnectRecoveryTimeout: NodeJS.Timeout | null = null;
+  private terminalReason: string | null = null;
   
   // Binary channel handling
   private setWaitingForChunk?: (fileIndex: number, chunkIndex: number, chunkSize: number) => void;
 
   get currentRole(): 'sender' | 'receiver' | null {
     return this.role;
+  }
+
+  private isTerminalLifecycleState(state: TransferLifecycleState = this.lifecycleState): boolean {
+    return state === 'completed' || state === 'cancelled' || state === 'failed';
+  }
+
+  private clearCompletionAckTimeout(): void {
+    if (this.completionAckTimeout) {
+      clearTimeout(this.completionAckTimeout);
+      this.completionAckTimeout = null;
+    }
+  }
+
+  private clearDisconnectRecoveryTimeout(): void {
+    if (this.disconnectRecoveryTimeout) {
+      clearTimeout(this.disconnectRecoveryTimeout);
+      this.disconnectRecoveryTimeout = null;
+    }
+  }
+
+  private transitionLifecycleState(nextState: TransferLifecycleState, reason: string): void {
+    if (this.lifecycleState === nextState) {
+      return;
+    }
+
+    if (this.isTerminalLifecycleState() && nextState !== 'idle') {
+      console.log(
+        `Ignoring lifecycle transition ${this.lifecycleState} -> ${nextState} (${reason}) because transfer is already terminal.`,
+      );
+      return;
+    }
+
+    const previous = this.lifecycleState;
+    this.lifecycleState = nextState;
+    if (this.isTerminalLifecycleState(nextState)) {
+      this.terminalReason = reason;
+    }
+
+    console.log(`Lifecycle transition: ${previous} -> ${nextState} (${reason})`);
+  }
+
+  private failTransfer(
+    message: string,
+    options?: {
+      cleanup?: boolean;
+      serverCancelReason?: string;
+    },
+  ): void {
+    if (this.isTerminalLifecycleState()) {
+      console.log(`Ignoring transfer failure after terminal state (${this.lifecycleState}): ${message}`);
+      return;
+    }
+
+    this.clearCompletionAckTimeout();
+    this.transferCompleted = false;
+    this.transitionLifecycleState('failed', message);
+    if (options?.serverCancelReason && this.serverTransferActive) {
+      this.notifyServerTransferCancelled('system', options.serverCancelReason);
+    }
+    this.onError?.(message);
+
+    if (options?.cleanup) {
+      this.cleanup();
+    }
+  }
+
+  private completeTransfer(reason: string): void {
+    if (this.lifecycleState === 'completed' || this.transferCompleted) {
+      return;
+    }
+
+    if (this.isTerminalLifecycleState()) {
+      console.log(`Ignoring transfer completion because lifecycle is ${this.lifecycleState} (${this.terminalReason || 'n/a'})`);
+      return;
+    }
+
+    this.clearCompletionAckTimeout();
+    this.transferCompleted = true;
+    this.transitionLifecycleState('completed', reason);
+    this.notifyServerTransferComplete(this.getTotalFilesSize());
+    this.onTransferComplete?.();
+  }
+
+  private cancelTransferState(
+    cancelledBy: 'sender' | 'receiver' | 'system',
+    reason: string,
+    options?: { cleanup?: boolean },
+  ): void {
+    if (this.isTerminalLifecycleState()) {
+      console.log(`Ignoring transfer cancellation after terminal state (${this.lifecycleState}): ${reason}`);
+      return;
+    }
+
+    this.transferCompleted = false;
+    this.clearCompletionAckTimeout();
+    this.transitionLifecycleState('cancelled', reason);
+    this.notifyServerTransferCancelled(cancelledBy, reason);
+    this.onTransferCancelled?.(cancelledBy);
+
+    if (options?.cleanup) {
+      this.cleanup();
+    }
+  }
+
+  private areReceiverFilesSettled(): boolean {
+    if (this.role !== 'receiver') {
+      return true;
+    }
+
+    if (this.expectedFiles.length > 0) {
+      return this.expectedFiles.every((file) => {
+        if (this.cancelledFiles.has(file.fileIndex)) {
+          return true;
+        }
+        const received = this.receivedFiles.get(file.fileIndex);
+        return Boolean(received?.complete);
+      });
+    }
+
+    for (const [fileIndex, fileInfo] of this.receivedFiles.entries()) {
+      if (this.cancelledFiles.has(fileIndex)) {
+        continue;
+      }
+      if (!fileInfo.complete) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private isControlMessage(value: unknown): value is ControlMessage {
@@ -460,6 +606,55 @@ export class WebRTCService {
     });
   }
 
+  private bytesToHex(bytes: Uint8Array): string {
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) {
+      hex += bytes[i].toString(16).padStart(2, '0');
+    }
+    return hex;
+  }
+
+  private async computeSha256(data: Blob | ArrayBuffer | Uint8Array): Promise<string | null> {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle) {
+      console.warn('SHA-256 unavailable in this browser context; integrity verification will be skipped.');
+      return null;
+    }
+
+    try {
+      let sourceBuffer: ArrayBuffer;
+      if (data instanceof Blob) {
+        sourceBuffer = await data.arrayBuffer();
+      } else if (data instanceof Uint8Array) {
+        // Copy into a fresh ArrayBuffer to avoid SharedArrayBuffer typing issues.
+        const copiedBytes = new Uint8Array(data.byteLength);
+        copiedBytes.set(data);
+        sourceBuffer = copiedBytes.buffer;
+      } else {
+        sourceBuffer = data;
+      }
+
+      const digest = await subtle.digest('SHA-256', sourceBuffer);
+      return this.bytesToHex(new Uint8Array(digest));
+    } catch (error) {
+      console.warn('SHA-256 computation failed; integrity verification will be skipped.', error);
+      return null;
+    }
+  }
+
+  private async getOrCreateSenderFileHash(fileIndex: number, file: File): Promise<string | null> {
+    const cached = this.fileHashCache.get(fileIndex);
+    if (cached) {
+      return cached;
+    }
+
+    const hash = await this.computeSha256(file);
+    if (hash) {
+      this.fileHashCache.set(fileIndex, hash);
+    }
+    return hash;
+  }
+
   private async resendRequestedChunks(fileIndex: number, chunkIndices: number[]): Promise<void> {
     if (this.role !== 'sender') return;
     if (chunkIndices.length === 0) return;
@@ -652,10 +847,14 @@ export class WebRTCService {
     this.hasRemoteDescription = false;
     this.pendingChunkWrites.clear();
     this.pendingChunkResends.clear();
+    this.fileHashCache.clear();
     this.transferCompleted = false;
     this.transferStarted = false;
     this.serverTransferActive = false;
     this.fallbackToCompatibilityMode = false;
+    this.terminalReason = null;
+    this.clearCompletionAckTimeout();
+    this.transitionLifecycleState('connecting', 'initialize-sender');
     
     // Detect sender capability for adaptive chunk sizing
     this.senderIsMobile = isMobileDevice();
@@ -702,9 +901,13 @@ export class WebRTCService {
     this.hasRemoteDescription = false;
     this.pendingChunkWrites.clear();
     this.pendingChunkResends.clear();
+    this.fileHashCache.clear();
     this.transferCompleted = false;
     this.transferStarted = false;
     this.serverTransferActive = false;
+    this.terminalReason = null;
+    this.clearCompletionAckTimeout();
+    this.transitionLifecycleState('connecting', 'initialize-receiver');
     
     this.onStatusMessage?.('Connecting to sender...');
     
@@ -737,15 +940,36 @@ export class WebRTCService {
 
       if (state === 'connected') {
         this.clearConnectionTimeout();
+        this.clearDisconnectRecoveryTimeout();
+        if (!this.isTerminalLifecycleState()) {
+          this.transitionLifecycleState('transferring', 'peer-connection-connected');
+        }
         this.onStatusMessage?.('Connected! Preparing transfer...');
       } else if (state === 'failed') {
-        this.onError?.('Connection failed. Please try again.');
-        this.cleanup();
+        this.clearDisconnectRecoveryTimeout();
+        this.failTransfer('Connection failed. Please try again.', {
+          cleanup: true,
+          serverCancelReason: 'peer-connection-failed',
+        });
       } else if (state === 'disconnected') {
         // Only treat disconnection as error if transfer was incomplete
-        if (!this.transferCompleted) {
-          this.onError?.('Connection lost. Transfer incomplete.');
+        if (!this.transferCompleted && !this.disconnectRecoveryTimeout) {
+          this.onStatusMessage?.('Connection unstable. Attempting to recover...');
+          this.disconnectRecoveryTimeout = setTimeout(() => {
+            this.disconnectRecoveryTimeout = null;
+            if (
+              !this.transferCompleted &&
+              this.peerConnection &&
+              this.peerConnection.connectionState === 'disconnected'
+            ) {
+              this.failTransfer('Connection lost. Transfer incomplete.', {
+                serverCancelReason: 'peer-connection-disconnected',
+              });
+            }
+          }, CONFIG.DISCONNECT_RECOVERY_MS);
         }
+      } else if (state === 'connecting') {
+        this.clearDisconnectRecoveryTimeout();
       }
     };
 
@@ -848,7 +1072,9 @@ export class WebRTCService {
       console.error('Data channel error:', error);
       // Only treat as error if transfer wasn't completed successfully
       if (!this.transferCompleted) {
-        this.onError?.('Connection error occurred');
+        this.failTransfer('Connection error occurred', {
+          serverCancelReason: 'data-channel-error',
+        });
       } else {
         console.log('✅ Data channel closed after successful transfer');
       }
@@ -1003,11 +1229,12 @@ export class WebRTCService {
     }
 
     if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
-      this.onError?.('Connection not ready');
+      this.failTransfer('Connection not ready', { serverCancelReason: 'connection-not-ready' });
       return;
     }
 
     this.transferStarted = true;
+    this.transitionLifecycleState('transferring', 'start-transfer');
 
     try {
       await this.ensureBinaryReadyOrFallback();
@@ -1066,9 +1293,8 @@ export class WebRTCService {
       // The TRANSFER_COMPLETE will be sent by checkTransferCompletion() when all files are acknowledged
     } catch (error) {
       this.transferStarted = false;
-      this.notifyServerTransferCancelled('system', 'start-transfer-failed');
       const message = error instanceof Error ? error.message : 'Transfer failed';
-      this.onError?.(message);
+      this.failTransfer(message, { serverCancelReason: 'start-transfer-failed' });
     }
   }
 
@@ -1076,6 +1302,7 @@ export class WebRTCService {
   private async sendFileBinary(fileIndex: number): Promise<void> {
     const file = this.filesToSend[fileIndex];
     if (!file || this.cancelledFiles.has(fileIndex)) return;
+    const fileHashPromise = this.getOrCreateSenderFileHash(fileIndex, file);
 
     const binaryChannel = await this.waitForChannelOpen(() => this.binaryChannel, 'binary', 15000);
 
@@ -1168,12 +1395,14 @@ export class WebRTCService {
     if (!this.cancelledFiles.has(fileIndex)) {
       // Prevent FILE_COMPLETE from racing ahead of late binary chunks.
       await this.waitForChannelBufferDrain(binaryChannel, 'binary');
+      const fileHash = await fileHashPromise;
 
       this.sendControlMessage({
         type: MSG_TYPE.FILE_COMPLETE,
         fileIndex,
         fileName: file.name,
         totalChunks,
+        fileHash: fileHash || undefined,
       });
     }
   }
@@ -1182,6 +1411,7 @@ export class WebRTCService {
   private async sendFileBase64(fileIndex: number): Promise<void> {
     const file = this.filesToSend[fileIndex];
     if (!file || this.cancelledFiles.has(fileIndex)) return;
+    const fileHashPromise = this.getOrCreateSenderFileHash(fileIndex, file);
 
     console.log('Sending file ' + fileIndex + ': ' + file.name + ' (' + file.size + ' bytes) via Base64 compatibility mode');
 
@@ -1194,7 +1424,7 @@ export class WebRTCService {
       }
 
       if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
-        this.onError?.('Connection not ready');
+        this.failTransfer('Connection not ready', { serverCancelReason: 'connection-not-ready' });
         return;
       }
     }
@@ -1268,12 +1498,14 @@ export class WebRTCService {
       });
 
       await new Promise((resolve) => setTimeout(resolve, 40));
+      const fileHash = await fileHashPromise;
 
       this.sendControlMessage({
         type: MSG_TYPE.FILE_COMPLETE,
         fileIndex,
         fileName: file.name,
         totalChunks,
+        fileHash: fileHash || undefined,
       });
     }
   }
@@ -1422,13 +1654,43 @@ export class WebRTCService {
         break;
         
       case MSG_TYPE.TRANSFER_COMPLETE:
-        this.transferCompleted = true;
-        this.onTransferComplete?.();
-        this.onStatusMessage?.('All files received successfully!');
+        if (this.role === 'receiver') {
+          if (!this.areReceiverFilesSettled()) {
+            const message = 'Transfer completion was received before all files were finalized.';
+            this.sendControlMessage({
+              type: MSG_TYPE.ERROR,
+              message,
+            });
+            this.failTransfer(message, { serverCancelReason: 'premature-transfer-complete' });
+            break;
+          }
+
+          this.sendControlMessage({
+            type: MSG_TYPE.TRANSFER_COMPLETE_ACK,
+          });
+          this.completeTransfer('receiver-confirmed-transfer-complete');
+          this.onStatusMessage?.('All files received successfully!');
+        } else {
+          console.log('Ignoring TRANSFER_COMPLETE on sender side');
+        }
+        break;
+
+      case MSG_TYPE.TRANSFER_COMPLETE_ACK:
+        if (this.role === 'sender' && this.lifecycleState === 'awaiting-final-ack') {
+          this.completeTransfer('sender-received-transfer-complete-ack');
+          this.onStatusMessage?.('All files sent and confirmed received!');
+        } else {
+          console.log('Ignoring unexpected TRANSFER_COMPLETE_ACK', {
+            role: this.role,
+            lifecycleState: this.lifecycleState,
+          });
+        }
         break;
         
       case MSG_TYPE.ERROR:
-        this.onError?.(message.message || 'Transfer error occurred');
+        this.failTransfer(message.message || 'Transfer error occurred', {
+          serverCancelReason: 'peer-error',
+        });
         break;
 
       case MSG_TYPE.CANCEL:
@@ -1442,21 +1704,22 @@ export class WebRTCService {
 
   private handleTransferCancel(message: ControlMessage): void {
     const cancelledBy = message.cancelledBy ?? (this.role === 'sender' ? 'receiver' : 'sender');
-    this.notifyServerTransferCancelled(cancelledBy, 'peer-cancelled');
-    this.onTransferCancelled?.(cancelledBy);
     this.onStatusMessage?.(`Transfer cancelled by ${cancelledBy}`);
-    this.cleanup();
+    this.cancelTransferState(cancelledBy, 'peer-cancelled', { cleanup: true });
   }
 
   private handleFileList(files: FileMetadata[], transferMethod?: TransferMethod): void {
     console.log('Received file list:', files, 'Method:', transferMethod);
     this.expectedFiles = files;
+    if (!this.isTerminalLifecycleState()) {
+      this.transitionLifecycleState('transferring', 'received-file-list');
+    }
     this.onIncomingFiles?.(files);
     this.onStatusMessage?.(`Ready to receive files (${transferMethod || 'unknown'} mode)`);
   }
 
   private handleFileStart(message: ControlMessage): void {
-    const { fileIndex, fileName, fileSize, fileType, lastModified, totalChunks, transferMethod } = message;
+    const { fileIndex, fileName, fileSize, fileType, lastModified, totalChunks, transferMethod, fileHash } = message;
 
     if (
       fileIndex === undefined ||
@@ -1496,6 +1759,7 @@ export class WebRTCService {
       complete: false,
       transferMethod: resolvedTransferMethod,
       storageMode,
+      expectedHash: typeof fileHash === 'string' && fileHash ? fileHash.toLowerCase() : undefined,
     });
     
     this.onStatusMessage?.(`Receiving ${fileName}...`);
@@ -1530,7 +1794,10 @@ export class WebRTCService {
         if (latestFileInfo) {
           latestFileInfo.bytesReceived = Math.max(0, latestFileInfo.bytesReceived - data.byteLength);
         }
-        this.onError?.(`Failed to persist received chunk: ${error instanceof Error ? error.message : 'unknown error'}`);
+        this.failTransfer(
+          `Failed to persist received chunk: ${error instanceof Error ? error.message : 'unknown error'}`,
+          { serverCancelReason: 'chunk-persist-failed' },
+        );
       });
     } else {
       fileInfo.chunks.set(chunkIndex, data);
@@ -1588,7 +1855,10 @@ export class WebRTCService {
         if (latestFileInfo) {
           latestFileInfo.bytesReceived = Math.max(0, latestFileInfo.bytesReceived - chunkToStore.byteLength);
         }
-        this.onError?.(`Failed to persist received chunk: ${error instanceof Error ? error.message : 'unknown error'}`);
+        this.failTransfer(
+          `Failed to persist received chunk: ${error instanceof Error ? error.message : 'unknown error'}`,
+          { serverCancelReason: 'chunk-persist-failed' },
+        );
       });
     } else {
       fileInfo.chunks.set(chunkIndex, data);
@@ -1624,6 +1894,7 @@ export class WebRTCService {
       this.pendingChunkWrites.delete(fileIndex);
       this.pendingChunkResends.delete(fileIndex);
       this.receivedFiles.delete(fileIndex);
+      this.fileHashCache.delete(fileIndex);
 
       if (this.transferSessionId) {
         void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch((error) => {
@@ -1634,10 +1905,14 @@ export class WebRTCService {
       this.onFileCancelled?.({
         fileIndex,
         fileName: fileName!,
-        cancelledBy: cancelledBy!,
+        cancelledBy: cancelledBy === 'receiver' ? 'receiver' : 'sender',
       });
       
       console.log(`File ${fileIndex} (${fileName}) cancelled by ${cancelledBy}`);
+
+      if (this.role === 'sender') {
+        this.checkTransferCompletion();
+      }
     }
   }
 
@@ -1657,38 +1932,72 @@ export class WebRTCService {
   }
 
   private handleFileAck(message: ControlMessage): void {
-    const { fileIndex, fileName } = message;
-    
-    console.log(`📨 Received FILE_ACK for file ${fileIndex}: ${fileName}`);
-    
-    // Track acknowledged files
-    if (fileIndex !== undefined) {
-      this.acknowledgedFiles.add(fileIndex);
-      
-      const file = this.filesToSend[fileIndex];
-      if (file) {
-        // Only send progress update if we haven't already sent 100%
-        const progress = this.sendProgressMap.get(fileIndex);
-        const alreadyComplete = progress && progress.sentChunks.size === progress.totalChunks;
-        
-        if (!alreadyComplete) {
-          this.onTransferProgress?.({
-            fileName: fileName || file.name,
-            fileIndex,
-            progress: 100,
-            bytesTransferred: file.size,
-            totalBytes: file.size,
-            speed: 0,
-            stage: 'transferring',
-          });
-        }
-        
-        console.log(`✅ File ${fileIndex} (${fileName}) confirmed received by peer`);
-      }
-      
-      // Check if all files have been acknowledged
-      this.checkTransferCompletion();
+    const { fileIndex, fileName, fileHash } = message;
+
+    if (fileIndex === undefined) {
+      console.warn('Received FILE_ACK without fileIndex');
+      return;
     }
+
+    const normalizedAckHash =
+      typeof fileHash === 'string' && fileHash.trim().length > 0 ? fileHash.toLowerCase() : undefined;
+    const expectedHash = this.fileHashCache.get(fileIndex);
+    const resolvedFileName = fileName || this.filesToSend[fileIndex]?.name || `file ${fileIndex}`;
+
+    console.log(
+      `📨 Received FILE_ACK for file ${fileIndex}: ${resolvedFileName}${normalizedAckHash ? ` (hash: ${normalizedAckHash.slice(0, 12)}...)` : ''}`,
+    );
+
+    if (expectedHash && normalizedAckHash && expectedHash !== normalizedAckHash) {
+      console.error(
+        `Integrity verification failed for ${resolvedFileName}: sender hash ${expectedHash}, receiver hash ${normalizedAckHash}`,
+      );
+      this.cancelledFiles.add(fileIndex);
+      this.pendingChunkResends.delete(fileIndex);
+      this.sendProgressMap.delete(fileIndex);
+      this.sendChunksMap.delete(fileIndex);
+      this.sentFileProfiles.delete(fileIndex);
+      this.fileHashCache.delete(fileIndex);
+      this.onStatusMessage?.(`Transfer failed integrity check for ${resolvedFileName}`);
+      this.failTransfer(`Integrity check failed for ${resolvedFileName}. Please resend the file.`, {
+        serverCancelReason: `hash-mismatch-file-${fileIndex}`,
+      });
+      return;
+    }
+
+    if (expectedHash && !normalizedAckHash) {
+      console.warn(
+        `Receiver acknowledged ${resolvedFileName} without hash verification metadata. Continuing for compatibility.`,
+      );
+    }
+
+    this.acknowledgedFiles.add(fileIndex);
+
+    const file = this.filesToSend[fileIndex];
+    if (file) {
+      // Only send progress update if we haven't already sent 100%
+      const progress = this.sendProgressMap.get(fileIndex);
+      const alreadyComplete = progress && progress.sentChunks.size === progress.totalChunks;
+
+      if (!alreadyComplete) {
+        this.onTransferProgress?.({
+          fileName: fileName || file.name,
+          fileIndex,
+          progress: 100,
+          bytesTransferred: file.size,
+          totalBytes: file.size,
+          speed: 0,
+          stage: 'transferring',
+        });
+      }
+
+      console.log(`✅ File ${fileIndex} (${resolvedFileName}) confirmed received by peer`);
+    }
+
+    this.fileHashCache.delete(fileIndex);
+
+    // Check if all files have been acknowledged
+    this.checkTransferCompletion();
   }
 
   private handleProgressSync(message: ControlMessage): void {
@@ -1776,6 +2085,18 @@ export class WebRTCService {
   }
 
   private checkTransferCompletion(): void {
+    if (this.role !== 'sender') {
+      return;
+    }
+
+    if (this.isTerminalLifecycleState()) {
+      return;
+    }
+
+    if (this.lifecycleState === 'awaiting-final-ack') {
+      return;
+    }
+
     const totalFiles = this.filesToSend.length;
     const acknowledgedCount = this.acknowledgedFiles.size;
     const cancelledCount = this.cancelledFiles.size;
@@ -1785,14 +2106,21 @@ export class WebRTCService {
     // All files either acknowledged or cancelled
     if (acknowledgedCount + cancelledCount >= totalFiles) {
       console.log('🎉 All files processed! Transfer complete.');
-      
-      // Now send TRANSFER_COMPLETE to notify receiver that sender is done
+
+      // Sender enters a final handshake phase. It only reports completion after the
+      // receiver confirms with TRANSFER_COMPLETE_ACK.
+      this.transitionLifecycleState('awaiting-final-ack', 'all-files-acked');
       this.sendControlMessage({ type: MSG_TYPE.TRANSFER_COMPLETE });
-      this.notifyServerTransferComplete(this.getTotalFilesSize());
-      
-      this.transferCompleted = true;
-      this.onTransferComplete?.();
-      this.onStatusMessage?.('All files sent and confirmed received!');
+      this.onStatusMessage?.('All files sent. Waiting for receiver confirmation...');
+
+      this.clearCompletionAckTimeout();
+      this.completionAckTimeout = setTimeout(() => {
+        if (this.lifecycleState === 'awaiting-final-ack') {
+          this.failTransfer('Timed out waiting for receiver confirmation. Please retry.', {
+            serverCancelReason: 'transfer-complete-ack-timeout',
+          });
+        }
+      }, 15000);
     }
   }
 
@@ -1828,7 +2156,7 @@ export class WebRTCService {
   }
 
   private async handleFileComplete(message: ControlMessage): Promise<void> {
-    const { fileIndex, fileName, totalChunks } = message;
+    const { fileIndex, fileName, totalChunks, fileHash } = message;
 
     if (fileIndex === undefined) {
       console.error('FILE_COMPLETE missing fileIndex');
@@ -1844,6 +2172,10 @@ export class WebRTCService {
     if (!fileInfo) {
       console.error(`FILE_COMPLETE for unknown file ${fileIndex}`);
       return;
+    }
+
+    if (typeof fileHash === 'string' && fileHash) {
+      fileInfo.expectedHash = fileHash.toLowerCase();
     }
 
     await this.waitForPendingChunkWrites(fileIndex);
@@ -1929,7 +2261,9 @@ export class WebRTCService {
         void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch(() => undefined);
       }
 
-      this.onError?.(`Transfer incomplete: ${fileName} (missing ${missingChunks.length} chunks)`);
+      this.failTransfer(`Transfer incomplete: ${fileName} (missing ${missingChunks.length} chunks)`, {
+        serverCancelReason: 'missing-chunks-after-repair',
+      });
       return;
     } else {
       console.log(`✅ All chunks received for ${fileName}, proceeding with reconstruction`);
@@ -1942,8 +2276,9 @@ export class WebRTCService {
         const persisted = await this.chunkStore.getFileChunks(this.transferSessionId, fileIndex, expectedChunks);
         if (persisted.missingChunkIndices.length > 0) {
           const missingPreview = persisted.missingChunkIndices.slice(0, 10).join(', ');
-          this.onError?.(
+          this.failTransfer(
             `Transfer incomplete: ${fileName} (missing ${persisted.missingChunkIndices.length} persisted chunks: ${missingPreview}${persisted.missingChunkIndices.length > 10 ? '...' : ''})`,
+            { serverCancelReason: 'missing-persisted-chunks' },
           );
           if (this.transferSessionId) {
             void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch(() => undefined);
@@ -2170,6 +2505,45 @@ export class WebRTCService {
       if (sizePercentage > 5) {
         console.warn(`Size mismatch for ${fileName}: expected ${expectedSize}, got ${file.size} (${sizePercentage.toFixed(2)}% difference)`);
       }
+
+      let verifiedFileHash: string | undefined;
+      if (fileInfo.expectedHash) {
+        const computedHash = await this.computeSha256(file);
+
+        if (computedHash) {
+          verifiedFileHash = computedHash.toLowerCase();
+
+          if (verifiedFileHash !== fileInfo.expectedHash) {
+            console.error(
+              `Integrity check failed for ${fileInfo.metadata.name}: expected ${fileInfo.expectedHash}, got ${verifiedFileHash}`,
+            );
+
+            this.sendControlMessage({
+              type: MSG_TYPE.ERROR,
+              fileIndex,
+              fileName: fileInfo.metadata.name,
+              message: `Integrity check failed for ${fileInfo.metadata.name}. Please resend this file.`,
+            });
+
+            this.pendingChunkWrites.delete(fileIndex);
+            this.pendingChunkResends.delete(fileIndex);
+            this.receivedFiles.delete(fileIndex);
+
+            if (fileInfo.storageMode === 'indexeddb' && this.transferSessionId) {
+              void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch(() => undefined);
+            }
+
+            this.failTransfer(`Integrity check failed for ${fileInfo.metadata.name}. Please resend the file.`, {
+              serverCancelReason: `receiver-integrity-failed-file-${fileIndex}`,
+            });
+            return;
+          }
+
+          console.log(`SHA-256 verified for ${fileInfo.metadata.name}`);
+        } else {
+          console.warn(`Unable to verify SHA-256 for ${fileInfo.metadata.name}; acknowledging without hash.`);
+        }
+      }
       
       fileInfo.complete = true;
       this.onFileReceived?.(file);
@@ -2198,6 +2572,7 @@ export class WebRTCService {
         type: MSG_TYPE.FILE_ACK,
         fileIndex: fileIndex!,
         fileName: fileInfo.metadata.name,
+        fileHash: verifiedFileHash,
       });
       
       console.log(`📤 Sent FILE_ACK for ${fileName} back to sender`);
@@ -2212,7 +2587,9 @@ export class WebRTCService {
       if (fileInfo.storageMode === 'indexeddb' && this.transferSessionId) {
         void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch(() => undefined);
       }
-      this.onError?.(`Failed to process ${fileName}: ${error}`);
+      this.failTransfer(`Failed to process ${fileName}: ${error}`, {
+        serverCancelReason: 'file-reconstruction-failed',
+      });
     }
   }
 
@@ -2310,15 +2687,17 @@ export class WebRTCService {
       }
     } catch (error) {
       console.error('Signaling error:', error);
-      this.onError?.('Connection setup failed');
+      this.failTransfer('Connection setup failed', { serverCancelReason: 'signaling-error' });
     }
   }
 
   private setConnectionTimeout(duration: number = 30000): void {
     this.connectionTimeout = setTimeout(() => {
       if (this.peerConnection?.connectionState !== 'connected') {
-        this.onError?.('Connection timeout. Please try again.');
-        this.cleanup();
+        this.failTransfer('Connection timeout. Please try again.', {
+          cleanup: true,
+          serverCancelReason: 'connection-timeout',
+        });
       }
     }, duration);
   }
@@ -2334,6 +2713,8 @@ export class WebRTCService {
     const sessionIdToClear = this.transferSessionId;
 
     this.clearConnectionTimeout();
+    this.clearCompletionAckTimeout();
+    this.clearDisconnectRecoveryTimeout();
 
     if (!this.transferCompleted && this.serverTransferActive) {
       this.notifyServerTransferCancelled('system', 'cleanup');
@@ -2368,6 +2749,9 @@ export class WebRTCService {
     this.acknowledgedFiles.clear();
     this.pendingChunkWrites.clear();
     this.pendingChunkResends.clear();
+    this.fileHashCache.clear();
+    this.terminalReason = null;
+    this.lifecycleState = 'idle';
     this.transferCompleted = false;
     this.transferStarted = false;
     this.serverTransferActive = false;
@@ -2389,6 +2773,8 @@ export class WebRTCService {
   cancelTransfer(): void {
     const cancelledBy = this.role === 'receiver' ? 'receiver' : 'sender';
     this.sendControlMessage({ type: MSG_TYPE.CANCEL, cancelledBy });
+    this.transferCompleted = false;
+    this.transitionLifecycleState('cancelled', 'local-cancel');
     this.notifyServerTransferCancelled(cancelledBy, 'local-cancel');
     this.cleanup();
   }
@@ -2398,6 +2784,7 @@ export class WebRTCService {
     this.cancelledFiles.add(fileIndex);
     this.pendingChunkWrites.delete(fileIndex);
     this.pendingChunkResends.delete(fileIndex);
+    this.fileHashCache.delete(fileIndex);
 
     // Ensure local partial receiver state is released immediately
     this.receivedFiles.delete(fileIndex);
