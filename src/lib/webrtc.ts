@@ -167,7 +167,7 @@ export class WebRTCService {
     conversionProgress?: number;
   }) => void;
   public onTransferComplete?: () => void;
-  public onTransferCancelled?: (cancelledBy: 'sender' | 'receiver' | 'system') => void;
+  public onTransferCancelled?: (data: { cancelledBy: 'sender' | 'receiver' | 'system'; reason?: string }) => void;
   public onFileCancelled?: (data: { fileIndex: number; fileName: string; cancelledBy: 'sender' | 'receiver' }) => void;
   public onError?: (error: string) => void;
   public onStatusMessage?: (message: string) => void;
@@ -308,7 +308,7 @@ export class WebRTCService {
     this.clearCompletionAckTimeout();
     this.transitionLifecycleState('cancelled', reason);
     this.notifyServerTransferCancelled(cancelledBy, reason);
-    this.onTransferCancelled?.(cancelledBy);
+    this.onTransferCancelled?.({ cancelledBy, reason });
 
     if (options?.cleanup) {
       this.cleanup();
@@ -1704,8 +1704,13 @@ export class WebRTCService {
 
   private handleTransferCancel(message: ControlMessage): void {
     const cancelledBy = message.cancelledBy ?? (this.role === 'sender' ? 'receiver' : 'sender');
-    this.onStatusMessage?.(`Transfer cancelled by ${cancelledBy}`);
-    this.cancelTransferState(cancelledBy, 'peer-cancelled', { cleanup: true });
+    const reason = typeof message.message === 'string' && message.message ? message.message : 'peer-cancelled';
+    this.onStatusMessage?.(
+      reason === 'all-files-cancelled'
+        ? 'Transfer cancelled.'
+        : `Transfer cancelled by ${cancelledBy}`,
+    );
+    this.cancelTransferState(cancelledBy, reason, { cleanup: true });
   }
 
   private handleFileList(files: FileMetadata[], transferMethod?: TransferMethod): void {
@@ -1911,7 +1916,7 @@ export class WebRTCService {
       console.log(`File ${fileIndex} (${fileName}) cancelled by ${cancelledBy}`);
 
       if (this.role === 'sender') {
-        this.checkTransferCompletion();
+        this.checkTransferCompletion(cancelledBy === 'receiver' ? 'receiver' : 'sender');
       }
     }
   }
@@ -1936,6 +1941,11 @@ export class WebRTCService {
 
     if (fileIndex === undefined) {
       console.warn('Received FILE_ACK without fileIndex');
+      return;
+    }
+
+    if (this.cancelledFiles.has(fileIndex)) {
+      console.log(`Ignoring FILE_ACK for cancelled file ${fileIndex} (${fileName || `file ${fileIndex}`})`);
       return;
     }
 
@@ -2084,7 +2094,7 @@ export class WebRTCService {
     }
   }
 
-  private checkTransferCompletion(): void {
+  private checkTransferCompletion(cancelledByHint: 'sender' | 'receiver' = 'sender'): void {
     if (this.role !== 'sender') {
       return;
     }
@@ -2102,6 +2112,15 @@ export class WebRTCService {
     const cancelledCount = this.cancelledFiles.size;
     
     console.log(`📊 Transfer status: ${acknowledgedCount}/${totalFiles} acknowledged, ${cancelledCount} cancelled`);
+
+    // If every file was cancelled, transfer outcome must be "cancelled" (not "completed").
+    if (totalFiles > 0 && cancelledCount >= totalFiles && acknowledgedCount === 0) {
+      const cancelledBy: 'sender' | 'receiver' | 'system' = cancelledByHint;
+      this.sendControlMessage({ type: MSG_TYPE.CANCEL, cancelledBy, message: 'all-files-cancelled' });
+      this.onStatusMessage?.('All files were cancelled.');
+      this.cancelTransferState(cancelledBy, 'all-files-cancelled', { cleanup: true });
+      return;
+    }
     
     // All files either acknowledged or cancelled
     if (acknowledgedCount + cancelledCount >= totalFiles) {
@@ -2772,7 +2791,7 @@ export class WebRTCService {
   // Cancel methods - restored from working implementation
   cancelTransfer(): void {
     const cancelledBy = this.role === 'receiver' ? 'receiver' : 'sender';
-    this.sendControlMessage({ type: MSG_TYPE.CANCEL, cancelledBy });
+    this.sendControlMessage({ type: MSG_TYPE.CANCEL, cancelledBy, message: 'local-cancel' });
     this.transferCompleted = false;
     this.transitionLifecycleState('cancelled', 'local-cancel');
     this.notifyServerTransferCancelled(cancelledBy, 'local-cancel');
@@ -2806,6 +2825,10 @@ export class WebRTCService {
     this.sendChunksMap.delete(fileIndex);
     
     console.log(`Cancelled file ${fileIndex} (${fileName})`);
+
+    if (this.role === 'sender') {
+      this.checkTransferCompletion('sender');
+    }
   }
 }
 

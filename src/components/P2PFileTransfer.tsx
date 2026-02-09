@@ -61,7 +61,27 @@ const toUserFriendlyError = (error: string): string => {
     return 'Transfer ended before all files were finalized. Please retry.';
   }
 
-  return message;
+  if (/integrity check failed|failed to persist received chunk|failed to process|signaling error/i.test(message)) {
+    return 'Transfer failed due to a connection issue. Please retry.';
+  }
+
+  // Default fallback keeps production UX clean and avoids exposing internal/debug phrasing.
+  return 'Transfer could not be completed. Please retry.';
+};
+
+const toUserFriendlyCancelMessage = (
+  cancelledBy: 'sender' | 'receiver' | 'system',
+  reason?: string | null,
+): string => {
+  if (reason === 'all-files-cancelled') {
+    return 'Transfer cancelled.';
+  }
+
+  if (cancelledBy === 'system') {
+    return 'Transfer was cancelled.';
+  }
+
+  return `Transfer cancelled by ${cancelledBy}.`;
 };
 
 export default function P2PFileTransfer() {
@@ -84,6 +104,11 @@ export default function P2PFileTransfer() {
   const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
   const [hasNavigatedToSharing, setHasNavigatedToSharing] = useState(false);
   const transferStatusRef = useRef<TransferState['status']>('idle');
+  const transferStateRef = useRef<TransferState>({
+    status: 'idle',
+    files: [],
+    progress: [],
+  });
   const transferCompletedRef = useRef(false);
   const transferFinalizedRef = useRef(false);
   const transferSessionActiveRef = useRef(false);
@@ -93,7 +118,8 @@ export default function P2PFileTransfer() {
 
   useEffect(() => {
     transferStatusRef.current = transferState.status;
-  }, [transferState.status]);
+    transferStateRef.current = transferState;
+  }, [transferState]);
 
   const notifyOnce = useCallback((
     key: string,
@@ -308,9 +334,16 @@ export default function P2PFileTransfer() {
       markTransferStarted();
     });
 
-    signalingService.onTransferCompleted((data) => {
-      // Treat server completion as informational only; local WebRTC completion remains authoritative.
-      console.log('Signaling transfer-completed event:', data);
+    signalingService.onTransferCompleted(() => {
+      if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
+        return;
+      }
+
+      const hadCancelledFiles = transferStateRef.current.progress.some((p) => p.cancelled);
+      const message = hadCancelledFiles
+        ? 'Transfer finished. Some files were cancelled.'
+        : 'Transfer completed successfully!';
+      finalizeTransfer('completed', message);
     });
 
     signalingService.onTransferCancelled((data) => {
@@ -322,10 +355,7 @@ export default function P2PFileTransfer() {
       const cancelledBy: 'sender' | 'receiver' | 'system' =
         raw === 'sender' || raw === 'receiver' || raw === 'system' ? raw : 'system';
 
-      const message =
-        cancelledBy === 'system'
-          ? 'Transfer was cancelled.'
-          : `Transfer cancelled by ${cancelledBy}.`;
+      const message = toUserFriendlyCancelMessage(cancelledBy, data.reason);
 
       finalizeTransfer('cancelled', message, message);
     });
@@ -535,11 +565,15 @@ export default function P2PFileTransfer() {
     };
 
     webrtcService.onTransferComplete = () => {
-      finalizeTransfer('completed', 'Transfer completed successfully!');
+      const hadCancelledFiles = transferStateRef.current.progress.some((p) => p.cancelled);
+      const message = hadCancelledFiles
+        ? 'Transfer finished. Some files were cancelled.'
+        : 'Transfer completed successfully!';
+      finalizeTransfer('completed', message);
     };
 
-    webrtcService.onTransferCancelled = (cancelledBy) => {
-      const message = `Transfer cancelled by ${cancelledBy}.`;
+    webrtcService.onTransferCancelled = ({ cancelledBy, reason }) => {
+      const message = toUserFriendlyCancelMessage(cancelledBy, reason);
       finalizeTransfer('cancelled', message, message);
     };
 
