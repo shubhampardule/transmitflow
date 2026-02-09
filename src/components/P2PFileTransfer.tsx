@@ -765,7 +765,7 @@ export default function P2PFileTransfer() {
       });
 
       console.log('Joining room:', code);
-      signalingService.joinRoom(code);
+      signalingService.joinRoom(code, { role: 'sender' });
 
     } catch (error) {
       console.error('Failed to initialize sender:', error);
@@ -800,7 +800,7 @@ export default function P2PFileTransfer() {
     });
 
     try {
-      signalingService.joinRoom(code);
+      signalingService.joinRoom(code, { role: 'receiver' });
       await webrtcService.initializeAsReceiver(code);
       notifyOnce('receiver-joined', 'info', 'Joined room. Waiting for sender...');
     } catch (error) {

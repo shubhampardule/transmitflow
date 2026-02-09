@@ -121,9 +121,22 @@ class SignalingService {
     }
   }
 
-  joinRoom(roomCode: string): void {
+  joinRoom(
+    roomCode: string,
+    options?: {
+      role?: 'sender' | 'receiver';
+      networkInfo?: { type?: string };
+    },
+  ): void {
     if (this.socket) {
-      this.socket.emit('join-room', roomCode);
+      const payload = options
+        ? {
+            roomId: roomCode,
+            role: options.role,
+            networkInfo: options.networkInfo,
+          }
+        : roomCode;
+      this.socket.emit('join-room', payload);
     }
   }
 
