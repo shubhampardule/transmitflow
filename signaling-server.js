@@ -156,6 +156,28 @@ const SDP_MAX_LENGTH = 2 * 1024 * 1024;
 const ICE_CANDIDATE_MAX_LENGTH = 8192;
 const MAX_REASON_LENGTH = 160;
 const MAX_FILE_NAME_LENGTH = 260;
+const GLOBAL_RATE_WINDOW_MS = 10 * 1000;
+const GLOBAL_SOCKET_RATE_LIMIT = 450;
+const GLOBAL_IP_RATE_LIMIT = 900;
+const ABUSE_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
+const ABUSE_COUNTER_TTL_MS = 15 * 60 * 1000;
+
+const EVENT_RATE_LIMITS = {
+  'join-room': { windowMs: 60 * 1000, perSocket: 6, perIp: 24, maxPayloadBytes: 1024, cost: 10 },
+  'webrtc-offer': { windowMs: 10 * 1000, perSocket: 20, perIp: 80, maxPayloadBytes: SDP_MAX_LENGTH + 16 * 1024, cost: 8 },
+  'webrtc-answer': { windowMs: 10 * 1000, perSocket: 20, perIp: 80, maxPayloadBytes: SDP_MAX_LENGTH + 16 * 1024, cost: 8 },
+  'webrtc-ice-candidate': { windowMs: 10 * 1000, perSocket: 180, perIp: 600, maxPayloadBytes: 16 * 1024, cost: 2 },
+  'connection-state': { windowMs: 10 * 1000, perSocket: 40, perIp: 140, maxPayloadBytes: 2048, cost: 2 },
+  'transfer-start': { windowMs: 60 * 1000, perSocket: 10, perIp: 40, maxPayloadBytes: 1024, cost: 6 },
+  'transfer-progress': { windowMs: 10 * 1000, perSocket: 60, perIp: 220, maxPayloadBytes: 8 * 1024, cost: 4 },
+  'transfer-complete': { windowMs: 60 * 1000, perSocket: 20, perIp: 80, maxPayloadBytes: 2048, cost: 6 },
+  'transfer-cancel': { windowMs: 60 * 1000, perSocket: 30, perIp: 120, maxPayloadBytes: 2048, cost: 5 },
+  'request-troubleshooting': { windowMs: 60 * 1000, perSocket: 8, perIp: 30, maxPayloadBytes: 1024, cost: 3 },
+  'heartbeat': { windowMs: 10 * 1000, perSocket: 30, perIp: 120, maxPayloadBytes: 1024, cost: 1 },
+};
+
+const socketAbuseCounters = new Map();
+const ipAbuseCounters = new Map();
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -213,6 +235,136 @@ function rejectInvalidPayload(socket, eventName, reason) {
     event: eventName,
     message: 'Invalid request payload',
   });
+}
+
+function getPayloadByteLength(payload) {
+  if (payload === undefined || payload === null) return 0;
+
+  try {
+    if (typeof payload === 'string') {
+      return Buffer.byteLength(payload, 'utf8');
+    }
+    return Buffer.byteLength(JSON.stringify(payload), 'utf8');
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function consumeWindowCounter(counterStore, key, windowMs, limit, cost = 1) {
+  const now = Date.now();
+  const existing = counterStore.get(key);
+
+  if (!existing || now - existing.windowStart >= windowMs) {
+    counterStore.set(key, {
+      windowStart: now,
+      count: cost,
+      lastSeen: now,
+    });
+    return { allowed: cost <= limit, retryAfterMs: cost <= limit ? 0 : windowMs };
+  }
+
+  existing.count += cost;
+  existing.lastSeen = now;
+  if (existing.count > limit) {
+    const retryAfterMs = Math.max(0, windowMs - (now - existing.windowStart));
+    return { allowed: false, retryAfterMs };
+  }
+
+  return { allowed: true, retryAfterMs: 0 };
+}
+
+function emitRateLimit(socket, eventName, reason, retryAfterMs, scope) {
+  console.warn(`[SECURITY] Rate limit (${scope}) on ${eventName} for ${socket.id}: ${reason}`);
+  socket.emit('rate-limited', {
+    event: eventName,
+    message: 'Too many requests. Please slow down.',
+    retryAfterMs: Math.max(0, retryAfterMs || 0),
+  });
+}
+
+function enforceAbuseProtection(socket, clientIP, eventName, payload) {
+  const policy = EVENT_RATE_LIMITS[eventName];
+  if (!policy) {
+    // Any missing policy should fail closed for safety.
+    rejectInvalidPayload(socket, eventName, 'missing-event-policy');
+    return false;
+  }
+
+  const payloadBytes = getPayloadByteLength(payload);
+  if (!Number.isFinite(payloadBytes) || payloadBytes > policy.maxPayloadBytes) {
+    rejectInvalidPayload(socket, eventName, `payload-too-large:${payloadBytes}`);
+    return false;
+  }
+
+  const globalCost = Math.max(1, policy.cost || 1);
+  const socketGlobal = consumeWindowCounter(
+    socketAbuseCounters,
+    `global:${socket.id}`,
+    GLOBAL_RATE_WINDOW_MS,
+    GLOBAL_SOCKET_RATE_LIMIT,
+    globalCost,
+  );
+  if (!socketGlobal.allowed) {
+    emitRateLimit(socket, eventName, 'socket-global-limit', socketGlobal.retryAfterMs, 'socket');
+    return false;
+  }
+
+  const ipKey = clientIP || 'unknown';
+  const ipGlobal = consumeWindowCounter(
+    ipAbuseCounters,
+    `global:${ipKey}`,
+    GLOBAL_RATE_WINDOW_MS,
+    GLOBAL_IP_RATE_LIMIT,
+    globalCost,
+  );
+  if (!ipGlobal.allowed) {
+    emitRateLimit(socket, eventName, 'ip-global-limit', ipGlobal.retryAfterMs, 'ip');
+    return false;
+  }
+
+  const socketEvent = consumeWindowCounter(
+    socketAbuseCounters,
+    `${eventName}:${socket.id}`,
+    policy.windowMs,
+    policy.perSocket,
+    1,
+  );
+  if (!socketEvent.allowed) {
+    emitRateLimit(socket, eventName, 'socket-event-limit', socketEvent.retryAfterMs, 'socket');
+    return false;
+  }
+
+  const ipEvent = consumeWindowCounter(
+    ipAbuseCounters,
+    `${eventName}:${ipKey}`,
+    policy.windowMs,
+    policy.perIp,
+    1,
+  );
+  if (!ipEvent.allowed) {
+    emitRateLimit(socket, eventName, 'ip-event-limit', ipEvent.retryAfterMs, 'ip');
+    return false;
+  }
+
+  return true;
+}
+
+function cleanupAbuseCounters(counterStore, cutoffMs) {
+  const now = Date.now();
+  for (const [key, entry] of counterStore.entries()) {
+    if (!entry || now - entry.lastSeen > cutoffMs) {
+      counterStore.delete(key);
+    }
+  }
+}
+
+function clearSocketAbuseCounters(socketId) {
+  const suffix = `:${socketId}`;
+  for (const key of socketAbuseCounters.keys()) {
+    if (key.endsWith(suffix)) {
+      socketAbuseCounters.delete(key);
+    }
+  }
 }
 
 function parseJoinRoomPayload(data) {
@@ -699,6 +851,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join-room', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'join-room', data)) {
+      return;
+    }
+
     const payload = parseJoinRoomPayload(data);
     if (!payload) {
       rejectInvalidPayload(socket, 'join-room', 'invalid-join-room-payload');
@@ -821,6 +977,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('webrtc-offer', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'webrtc-offer', data)) {
+      return;
+    }
+
     const payload = parseSessionDescriptionPayload(data, 'offer', 'offer');
     if (!payload) {
       rejectInvalidPayload(socket, 'webrtc-offer', 'invalid-offer-payload');
@@ -867,6 +1027,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('webrtc-answer', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'webrtc-answer', data)) {
+      return;
+    }
+
     const payload = parseSessionDescriptionPayload(data, 'answer', 'answer');
     if (!payload) {
       rejectInvalidPayload(socket, 'webrtc-answer', 'invalid-answer-payload');
@@ -888,6 +1052,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('webrtc-ice-candidate', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'webrtc-ice-candidate', data)) {
+      return;
+    }
+
     const payload = parseIceCandidatePayload(data);
     if (!payload) {
       rejectInvalidPayload(socket, 'webrtc-ice-candidate', 'invalid-ice-candidate-payload');
@@ -937,6 +1105,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('connection-state', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'connection-state', data)) {
+      return;
+    }
+
     const payload = parseConnectionStatePayload(data);
     if (!payload) {
       rejectInvalidPayload(socket, 'connection-state', 'invalid-connection-state-payload');
@@ -1002,6 +1174,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('transfer-start', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'transfer-start', data)) {
+      return;
+    }
+
     const payload = parseTransferStartPayload(data);
     if (!payload) {
       rejectInvalidPayload(socket, 'transfer-start', 'invalid-transfer-start-payload');
@@ -1026,6 +1202,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('transfer-progress', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'transfer-progress', data)) {
+      return;
+    }
+
     const payload = parseTransferProgressPayload(data);
     if (!payload) {
       rejectInvalidPayload(socket, 'transfer-progress', 'invalid-transfer-progress-payload');
@@ -1059,6 +1239,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('transfer-complete', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'transfer-complete', data)) {
+      return;
+    }
+
     const payload = parseTransferCompletePayload(data);
     if (!payload) {
       rejectInvalidPayload(socket, 'transfer-complete', 'invalid-transfer-complete-payload');
@@ -1086,6 +1270,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('transfer-cancel', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'transfer-cancel', data)) {
+      return;
+    }
+
     const payload = parseTransferCancelPayload(data);
     if (!payload) {
       rejectInvalidPayload(socket, 'transfer-cancel', 'invalid-transfer-cancel-payload');
@@ -1124,6 +1312,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('request-troubleshooting', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'request-troubleshooting', data)) {
+      return;
+    }
+
     const payload = parseRoomOnlyPayload(data);
     if (!payload) {
       rejectInvalidPayload(socket, 'request-troubleshooting', 'invalid-request-troubleshooting-payload');
@@ -1166,6 +1358,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('heartbeat', (data) => {
+    if (!enforceAbuseProtection(socket, clientIP, 'heartbeat', data)) {
+      return;
+    }
+
     const payload = parseRoomOnlyPayload(data);
     if (!payload) {
       rejectInvalidPayload(socket, 'heartbeat', 'invalid-heartbeat-payload');
@@ -1196,6 +1392,7 @@ io.on('connection', (socket) => {
 
     console.log(`Client disconnected: ${socket.id} after ${duration.toFixed(1)}s`);
     connectionStats.delete(socket.id);
+    clearSocketAbuseCounters(socket.id);
 
     if (socket.roomId) {
       const room = rooms.get(socket.roomId);
@@ -1224,6 +1421,11 @@ io.on('connection', (socket) => {
     }
   });
 });
+
+setInterval(() => {
+  cleanupAbuseCounters(socketAbuseCounters, ABUSE_COUNTER_TTL_MS);
+  cleanupAbuseCounters(ipAbuseCounters, ABUSE_COUNTER_TTL_MS);
+}, ABUSE_CLEANUP_INTERVAL_MS);
 
 
 
