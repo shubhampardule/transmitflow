@@ -4,6 +4,7 @@ import { SignalingMessage } from '@/types';
 class SignalingService {
   private socket: Socket | null = null;
   private serverUrl: string = '';
+  private dynamicIceServers: RTCIceServer[] = [];
   private signalListeners: {
     offer?: (data: { offer: RTCSessionDescriptionInit; from?: string }) => void;
     answer?: (data: { answer: RTCSessionDescriptionInit; from?: string }) => void;
@@ -26,6 +27,92 @@ class SignalingService {
     this.signalListeners = {};
   }
 
+  private parseIceServerUrls(rawUrls: unknown): string[] {
+    if (typeof rawUrls === 'string') {
+      const trimmed = rawUrls.trim();
+      return trimmed ? [trimmed] : [];
+    }
+
+    if (!Array.isArray(rawUrls)) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        rawUrls
+          .filter((entry): entry is string => typeof entry === 'string')
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0),
+      ),
+    );
+  }
+
+  private sanitizeIceServer(rawServer: unknown): RTCIceServer | null {
+    if (!rawServer || typeof rawServer !== 'object') {
+      return null;
+    }
+
+    const candidate = rawServer as {
+      urls?: unknown;
+      username?: unknown;
+      credential?: unknown;
+    };
+
+    const urls = this.parseIceServerUrls(candidate.urls);
+    if (urls.length === 0) {
+      return null;
+    }
+
+    const sanitized: RTCIceServer = { urls };
+
+    if (typeof candidate.username === 'string' && candidate.username.trim().length > 0) {
+      sanitized.username = candidate.username.trim();
+    }
+
+    if (typeof candidate.credential === 'string' && candidate.credential.trim().length > 0) {
+      sanitized.credential = candidate.credential.trim();
+    }
+
+    return sanitized;
+  }
+
+  private updateDynamicIceServers(rawServers: unknown): void {
+    if (!Array.isArray(rawServers)) {
+      this.dynamicIceServers = [];
+      return;
+    }
+
+    this.dynamicIceServers = rawServers
+      .map((server) => this.sanitizeIceServer(server))
+      .filter((server): server is RTCIceServer => server !== null);
+  }
+
+  private upsertDynamicIceServer(rawServer: unknown, newIndex?: unknown): void {
+    const sanitized = this.sanitizeIceServer(rawServer);
+    if (!sanitized) {
+      return;
+    }
+
+    if (typeof newIndex === 'number' && Number.isInteger(newIndex) && newIndex >= 0) {
+      if (newIndex < this.dynamicIceServers.length) {
+        const nextServers = [...this.dynamicIceServers];
+        nextServers[newIndex] = sanitized;
+        this.dynamicIceServers = nextServers;
+        return;
+      }
+
+      this.dynamicIceServers = [...this.dynamicIceServers, sanitized];
+      return;
+    }
+
+    if (this.dynamicIceServers.length > 0) {
+      this.dynamicIceServers = [sanitized, ...this.dynamicIceServers.slice(1)];
+      return;
+    }
+
+    this.dynamicIceServers = [sanitized];
+  }
+
   connect(serverUrl?: string): Promise<Socket> {
     return new Promise((resolve, reject) => {
       // If already connected, resolve with existing socket
@@ -40,6 +127,7 @@ class SignalingService {
         this.removeSignalListeners();
         this.socket.disconnect();
       }
+      this.dynamicIceServers = [];
 
       // Determine the correct signaling server URL
       if (serverUrl) {
@@ -77,6 +165,26 @@ class SignalingService {
         reconnectionDelay: 1000,
         upgrade: true, // Allow transport upgrades
         rememberUpgrade: false, // Don't remember the upgrade
+      });
+
+      this.socket.on('turn-servers', (data: { servers?: unknown }) => {
+        this.updateDynamicIceServers(data?.servers);
+        const relayServerCount = this.dynamicIceServers.filter(
+          (server) =>
+            typeof server.username === 'string' &&
+            server.username.length > 0 &&
+            typeof server.credential === 'string' &&
+            server.credential.length > 0,
+        ).length;
+
+        console.log('Received ICE server configuration from signaling server:', {
+          totalServers: this.dynamicIceServers.length,
+          relayServers: relayServerCount,
+        });
+      });
+
+      this.socket.on('turn-server-switch', (data: { server?: unknown; newIndex?: unknown }) => {
+        this.upsertDynamicIceServer(data?.server, data?.newIndex);
       });
 
       this.socket.on('connect', () => {
@@ -119,6 +227,7 @@ class SignalingService {
       this.socket.disconnect();
       this.socket = null;
     }
+    this.dynamicIceServers = [];
   }
 
   joinRoom(
@@ -328,7 +437,16 @@ class SignalingService {
       this.socket.off('transfer-started');
       this.socket.off('transfer-completed');
       this.socket.off('transfer-cancelled');
+      this.socket.off('turn-servers');
+      this.socket.off('turn-server-switch');
     }
+  }
+
+  getIceServers(): RTCIceServer[] {
+    return this.dynamicIceServers.map((server) => ({
+      ...server,
+      urls: Array.isArray(server.urls) ? [...server.urls] : server.urls,
+    }));
   }
 
   get id(): string | null {

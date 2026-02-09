@@ -12,6 +12,33 @@ const isMobileDevice = () => {
     || window.innerWidth < 768;
 };
 
+const parseIceUrls = (rawValue?: string): string[] => {
+  if (!rawValue || typeof rawValue !== 'string') {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      rawValue
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    ),
+  );
+};
+
+const TURN_URLS = parseIceUrls(process.env.NEXT_PUBLIC_TURN_URLS || process.env.NEXT_PUBLIC_TURN_URL);
+const TURN_USERNAME = process.env.NEXT_PUBLIC_TURN_USER?.trim() || '';
+const TURN_CREDENTIAL = process.env.NEXT_PUBLIC_TURN_PASS?.trim() || '';
+const HAS_TURN_CONFIG = TURN_URLS.length > 0 && TURN_USERNAME.length > 0 && TURN_CREDENTIAL.length > 0;
+const STUN_URLS = parseIceUrls(process.env.NEXT_PUBLIC_STUN_URLS || process.env.NEXT_PUBLIC_STUN_URL);
+const DEFAULT_PUBLIC_STUN_URLS = [
+  'stun:stun.l.google.com:19302',
+  'stun:stun1.l.google.com:19302',
+  'stun:stun2.l.google.com:19302',
+];
+const EFFECTIVE_STUN_URLS = STUN_URLS.length > 0 ? STUN_URLS : DEFAULT_PUBLIC_STUN_URLS;
+
 // Adaptive configuration for throughput and compatibility
 const CONFIG = {
   // Binary mode (primary path for all devices)
@@ -130,16 +157,16 @@ export class WebRTCService {
   private bufferThreshold: number = CONFIG.BINARY_BUFFER_THRESHOLD;
   
   // ICE configuration
-  private readonly config: RTCConfiguration = {
+  private readonly baseConfig: RTCConfiguration = {
     iceServers: [
-      ...(process.env.NEXT_PUBLIC_TURN_URL && process.env.NEXT_PUBLIC_TURN_USER && process.env.NEXT_PUBLIC_TURN_PASS ? [{
-        urls: process.env.NEXT_PUBLIC_TURN_URL,
-        username: process.env.NEXT_PUBLIC_TURN_USER,
-        credential: process.env.NEXT_PUBLIC_TURN_PASS
+      ...(HAS_TURN_CONFIG ? [{
+        urls: TURN_URLS,
+        username: TURN_USERNAME,
+        credential: TURN_CREDENTIAL
       }] : []),
       
-      ...(process.env.NEXT_PUBLIC_STUN_URL ? [{
-        urls: process.env.NEXT_PUBLIC_STUN_URL
+      ...(EFFECTIVE_STUN_URLS.length > 0 ? [{
+        urls: EFFECTIVE_STUN_URLS
       }] : []),
     ],
     // For testing TURN server, you can temporarily force relay-only mode:
@@ -922,15 +949,33 @@ export class WebRTCService {
   private async createPeerConnection(): Promise<void> {
     console.log('Creating WebRTC peer connection...');
 
+    const signalingIceServers = signalingService.getIceServers();
+    const selectedIceServers =
+      signalingIceServers.length > 0
+        ? signalingIceServers
+        : (this.baseConfig.iceServers || []);
+    const peerConfig: RTCConfiguration = {
+      ...this.baseConfig,
+      iceServers: selectedIceServers,
+    };
+
+    const redactedIceServers = selectedIceServers.map((server) => ({
+      urls: Array.isArray(server.urls) ? server.urls : [server.urls],
+      usernameConfigured: typeof server.username === 'string' && server.username.length > 0,
+      credentialConfigured: typeof server.credential === 'string' && server.credential.length > 0,
+    }));
+
     // Debug ICE server configuration
     console.log('ICE Configuration:', {
-      iceServers: this.config.iceServers,
-      iceTransportPolicy: this.config.iceTransportPolicy,
-      turnConfigured: !!(process.env.NEXT_PUBLIC_TURN_URL && process.env.NEXT_PUBLIC_TURN_USER && process.env.NEXT_PUBLIC_TURN_PASS),
-      stunConfigured: !!process.env.NEXT_PUBLIC_STUN_URL,
+      source: signalingIceServers.length > 0 ? 'signaling-server' : 'env-fallback',
+      iceServerCount: redactedIceServers.length,
+      iceServers: redactedIceServers,
+      iceTransportPolicy: peerConfig.iceTransportPolicy,
+      turnConfigured: redactedIceServers.some((server) => server.credentialConfigured),
+      stunConfigured: redactedIceServers.some((server) => !server.credentialConfigured),
     });
 
-    this.peerConnection = new RTCPeerConnection(this.config);
+    this.peerConnection = new RTCPeerConnection(peerConfig);
     const peerConnection = this.peerConnection;
 
     peerConnection.onconnectionstatechange = () => {

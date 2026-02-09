@@ -707,10 +707,19 @@ vercel --prod
 Create a `.env` file with your configuration:
 ```env
 NEXT_PUBLIC_SIGNALING_SERVER_URL=https://your-signaling-server.com
-NEXT_PUBLIC_TURN_URL=turn:your-turn-server.com:3478
+
+# Client WebRTC ICE config (comma-separated lists supported)
+NEXT_PUBLIC_TURN_URLS=turn:your-turn-server.com:3478?transport=udp,turn:your-turn-server.com:3478?transport=tcp
 NEXT_PUBLIC_TURN_USER=your-username
 NEXT_PUBLIC_TURN_PASS=your-password
-NEXT_PUBLIC_STUN_URL=stun:your-stun-server.com:3478
+NEXT_PUBLIC_STUN_URLS=stun:your-stun-server.com:3478,stun:stun.l.google.com:19302
+
+# Signaling server (server-side only; do NOT expose publicly)
+TURN_URLS=turn:your-turn-server.com:3478?transport=udp,turn:your-turn-server.com:3478?transport=tcp
+TURN_USERNAME=your-username
+TURN_CREDENTIAL=your-password
+STUN_URLS=stun:your-stun-server.com:3478
+ALLOW_INSECURE_PUBLIC_TURN_FALLBACK=false
 NODE_ENV=production
 ```
 

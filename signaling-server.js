@@ -2,10 +2,17 @@ const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
 const cors = require('cors');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const SERVER_VERSION = '4.0.0';
+const HEALTH_DIAGNOSTICS_TOKEN =
+  process.env.SIGNALING_HEALTH_DIAGNOSTICS_TOKEN ||
+  process.env.SIGNALING_HEALTH_TOKEN ||
+  process.env.HEALTH_DIAGNOSTICS_TOKEN ||
+  '';
 
 const DEFAULT_PRODUCTION_ORIGINS = [
   'https://sendify-ivory.vercel.app',
@@ -22,30 +29,92 @@ const DEFAULT_DEVELOPMENT_ORIGINS = [
   'http://127.0.0.1:3001',
 ];
 
-// Health check with comprehensive diagnostics
+function timingSafeTokenMatch(expectedToken, providedToken) {
+  if (!expectedToken || !providedToken) return false;
+
+  const expected = Buffer.from(expectedToken, 'utf8');
+  const provided = Buffer.from(providedToken, 'utf8');
+  if (expected.length !== provided.length) {
+    return false;
+  }
+
+  try {
+    return crypto.timingSafeEqual(expected, provided);
+  } catch {
+    return false;
+  }
+}
+
+function getDiagnosticsAuthTokenFromRequest(req) {
+  const headerValue = req.get('x-health-token') || req.get('authorization') || '';
+  if (!headerValue) return '';
+
+  const trimmed = headerValue.trim();
+  if (/^bearer\s+/i.test(trimmed)) {
+    return trimmed.replace(/^bearer\s+/i, '').trim();
+  }
+
+  return trimmed;
+}
+
+function isDiagnosticsRequestAuthorized(req) {
+  // Diagnostics are open in non-production for local troubleshooting.
+  if (!IS_PRODUCTION) {
+    return true;
+  }
+
+  // In production, diagnostics require an explicit token.
+  if (!HEALTH_DIAGNOSTICS_TOKEN || typeof HEALTH_DIAGNOSTICS_TOKEN !== 'string') {
+    return false;
+  }
+
+  const providedToken = getDiagnosticsAuthTokenFromRequest(req);
+  return timingSafeTokenMatch(HEALTH_DIAGNOSTICS_TOKEN, providedToken);
+}
+
+// Public liveness endpoint (safe for internet exposure).
 app.get('/health', (req, res) => {
-  const healthInfo = {
+  res.status(200).json({
+    status: 'OK',
+    service: 'signaling-server',
+    version: SERVER_VERSION,
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.floor(process.uptime()),
+  });
+});
+
+// Detailed diagnostics endpoint (protected in production).
+app.get('/health/diagnostics', (req, res) => {
+  if (!isDiagnosticsRequestAuthorized(req)) {
+    // Return 404 in production to avoid advertising diagnostic endpoint details.
+    if (IS_PRODUCTION) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    return res.status(403).json({ error: 'Unauthorized diagnostics access' });
+  }
+
+  const diagnostics = {
     status: 'OK',
     timestamp: new Date().toISOString(),
-    uptime: Math.floor(process.uptime()),
+    uptimeSeconds: Math.floor(process.uptime()),
     rooms: rooms.size,
     activeConnections: io.sockets.sockets.size,
     environment: process.env.NODE_ENV || 'development',
-    longDistanceRooms: Array.from(rooms.values()).filter(r => r.isLongDistance).length,
-    relayConnections: Array.from(connectionIssues.values()).filter(c => c.usingRelay).length,
+    longDistanceRooms: Array.from(rooms.values()).filter((r) => r.isLongDistance).length,
+    relayConnections: Array.from(connectionIssues.values()).filter((c) => c.usingRelay).length,
     turnServers: turnServers.length,
     averageConnectionTime: getAverageConnectionTime(),
-    memoryUsage: process.memoryUsage()
+    memoryUsage: process.memoryUsage(),
   };
-  
-  res.status(200).json(healthInfo);
+
+  return res.status(200).json(diagnostics);
 });
 
 app.get('/', (req, res) => {
   res.status(200).json({
     message: 'Sendify P2P Signaling Server - Long Distance Optimized',
     status: 'Running',
-    version: '4.0.0',
+    version: SERVER_VERSION,
     features: [
       'Multi-TURN server failover',
       'Long-distance connection optimization',
@@ -66,24 +135,54 @@ const connectionStats = new Map();
 // const geolocation = new Map(); // Track approximate user locations (unused)
 const MAX_ROOM_SIZE = 2;
 const ROOM_TIMEOUT = 60 * 60 * 1000; // 1 hour for long transfers
+const ALLOW_INSECURE_PUBLIC_TURN_FALLBACK = /^(1|true|yes)$/i.test(
+  process.env.ALLOW_INSECURE_PUBLIC_TURN_FALLBACK || '',
+);
 
-// Multiple TURN/STUN servers for better global coverage
+const configuredTurnUrls = readConfiguredUrlList('TURN_URLS', ['TURN_URL', 'NEXT_PUBLIC_TURN_URL']);
+const configuredTurnUsername = readConfiguredSecret('TURN_USERNAME', ['TURN_USER', 'NEXT_PUBLIC_TURN_USER']);
+const configuredTurnCredential = readConfiguredSecret('TURN_CREDENTIAL', ['TURN_PASS', 'TURN_PASSWORD', 'NEXT_PUBLIC_TURN_PASS']);
+const configuredStunUrls = readConfiguredUrlList('STUN_URLS', ['STUN_URL', 'NEXT_PUBLIC_STUN_URL']);
+const hasCustomTurnConfigured = (
+  configuredTurnUrls.length > 0 &&
+  configuredTurnUsername.length > 0 &&
+  configuredTurnCredential.length > 0
+);
+
+if (configuredTurnUrls.length > 0 && !hasCustomTurnConfigured) {
+  console.warn(
+    '[SECURITY] TURN URLs were provided without full credentials. TURN relay configuration will be skipped.',
+  );
+}
+
+if (IS_PRODUCTION && !hasCustomTurnConfigured) {
+  console.warn(
+    '[SECURITY] Production is running without a custom TURN relay credential set. Some restrictive networks may fail to connect.',
+  );
+}
+
+if (IS_PRODUCTION && ALLOW_INSECURE_PUBLIC_TURN_FALLBACK) {
+  console.warn(
+    '[SECURITY] ALLOW_INSECURE_PUBLIC_TURN_FALLBACK is enabled in production. Disable this unless strictly needed.',
+  );
+}
+
+// Multiple TURN/STUN servers for better global coverage.
+// Security hardening: no shared public TURN credentials by default in production.
 const turnServers = [
-  // Custom TURN server (Oracle COTURN - primary)
-  ...(process.env.NEXT_PUBLIC_TURN_URL && process.env.NEXT_PUBLIC_TURN_USER && process.env.NEXT_PUBLIC_TURN_PASS ? [{
-    urls: [process.env.NEXT_PUBLIC_TURN_URL],
-    username: process.env.NEXT_PUBLIC_TURN_USER,
-    credential: process.env.NEXT_PUBLIC_TURN_PASS,
+  ...(hasCustomTurnConfigured ? [{
+    urls: configuredTurnUrls,
+    username: configuredTurnUsername,
+    credential: configuredTurnCredential,
     region: "custom"
   }] : []),
-  
-  // Custom STUN server (Oracle COTURN - same server, STUN mode)
-  ...(process.env.NEXT_PUBLIC_STUN_URL ? [{
-    urls: [process.env.NEXT_PUBLIC_STUN_URL],
+
+  ...(configuredStunUrls.length > 0 ? [{
+    urls: configuredStunUrls,
     region: "custom"
   }] : []),
-  
-  // Free public STUN servers for fallback
+
+  // Public STUN fallback remains acceptable because it does not expose relay credentials.
   {
     urls: [
       "stun:stun.l.google.com:19302",
@@ -92,8 +191,6 @@ const turnServers = [
     ],
     region: "global"
   },
-  
-  // Additional public STUN servers for redundancy
   {
     urls: [
       "stun:stun.stunprotocol.org:3478",
@@ -102,16 +199,15 @@ const turnServers = [
     ],
     region: "global"
   },
-  
-  // Free TURN server fallback
-  {
+
+  ...((!IS_PRODUCTION || ALLOW_INSECURE_PUBLIC_TURN_FALLBACK) ? [{
     urls: [
       "turn:turn.anyfirewall.com:443?transport=tcp"
     ],
     username: "webrtc",
     credential: "webrtc",
-    region: "global"
-  }
+    region: "global-insecure-fallback"
+  }] : []),
 ];
 
 const ROOM_CODE_REGEX = /^[A-Z0-9]{8}$/;
@@ -450,6 +546,44 @@ function clearSocketAbuseCounters(socketId) {
       socketAbuseCounters.delete(key);
     }
   }
+}
+
+function parseCommaSeparatedUrls(rawValue) {
+  if (typeof rawValue !== 'string' || rawValue.trim().length === 0) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      rawValue
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    ),
+  );
+}
+
+function readConfiguredUrlList(primaryName, fallbackNames = []) {
+  const candidateValues = [process.env[primaryName], ...fallbackNames.map((name) => process.env[name])];
+
+  for (const value of candidateValues) {
+    const parsed = parseCommaSeparatedUrls(value);
+    if (parsed.length > 0) {
+      return parsed;
+    }
+  }
+
+  return [];
+}
+
+function readConfiguredSecret(primaryName, fallbackNames = []) {
+  const candidateValues = [process.env[primaryName], ...fallbackNames.map((name) => process.env[name])];
+  for (const value of candidateValues) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return '';
 }
 
 function parseJoinRoomPayload(data) {
@@ -1529,6 +1663,11 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`🚀 Enhanced Sendify Signaling Server running on port ${PORT}`);
   console.log(`📡 Optimized for long-distance WebRTC connections`);
-  console.log(`🌍 Supporting ${turnServers.length} TURN servers for global coverage`);
+  console.log(
+    `🌍 ICE config: ${turnServers.length} server entries (${hasCustomTurnConfigured ? 'custom TURN enabled' : 'STUN-only fallback'})`,
+  );
+  if (IS_PRODUCTION && !hasCustomTurnConfigured) {
+    console.log('⚠️  Configure TURN_URLS, TURN_USERNAME, and TURN_CREDENTIAL for reliable production relay connectivity.');
+  }
   console.log(`⚡ Features: Multi-TURN failover, adaptive settings, connection recovery`);
 });
