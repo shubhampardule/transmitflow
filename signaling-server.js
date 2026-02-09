@@ -5,49 +5,22 @@ const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-// Enhanced CORS configuration
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? [
-        /^https:\/\/.*\.vercel\.app$/,
-        'https://sendify-ivory.vercel.app',
-        'https://sendify-ten.vercel.app',
-        'https://sendify.vercel.app',
-        'https://serverforminecraftbedrock.fun',
-        'https://www.serverforminecraftbedrock.fun'
-      ]
-    : true,
-  credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Forwarded-For']
-}));
+const DEFAULT_PRODUCTION_ORIGINS = [
+  'https://sendify-ivory.vercel.app',
+  'https://sendify-ten.vercel.app',
+  'https://sendify.vercel.app',
+  'https://serverforminecraftbedrock.fun',
+  'https://www.serverforminecraftbedrock.fun',
+];
 
-// Enhanced Socket.IO with optimizations for long-distance connections
-const io = socketIO(server, {
-  cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? [
-          /^https:\/\/.*\.vercel\.app$/, 
-          'https://sendify-ten.vercel.app',
-          'https://serverforminecraftbedrock.fun',
-          'https://www.serverforminecraftbedrock.fun'
-        ]
-      : true,
-    methods: ['GET', 'POST'],
-    credentials: true
-  },
-  transports: ['websocket', 'polling'],
-  allowEIO3: true,
-  pingTimeout: 180000,    // 3 minutes for very slow connections
-  pingInterval: 45000,    // Ping every 45 seconds
-  maxHttpBufferSize: 1e7,
-  perMessageDeflate: false,
-  upgradeTimeout: 60000,  // 1 minute upgrade timeout
-  allowUpgrades: true,
-  connectTimeout: 120000, // 2 minute connection timeout
-  timeout: 300000         // 5 minute total timeout
-});
+const DEFAULT_DEVELOPMENT_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
+];
 
 // Health check with comprehensive diagnostics
 app.get('/health', (req, res) => {
@@ -178,6 +151,118 @@ const EVENT_RATE_LIMITS = {
 
 const socketAbuseCounters = new Map();
 const ipAbuseCounters = new Map();
+
+function normalizeOrigin(origin) {
+  if (typeof origin !== 'string') return null;
+
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return `${parsed.protocol}//${parsed.host}`.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function parseOriginListFromEnv(raw) {
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return [];
+  }
+
+  return raw
+    .split(',')
+    .map((entry) => normalizeOrigin(entry.trim()))
+    .filter((entry) => Boolean(entry));
+}
+
+function isPrivateIpv4(hostname) {
+  if (typeof hostname !== 'string') return false;
+  if (/^10\./.test(hostname)) return true;
+  if (/^192\.168\./.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)) return true;
+  return false;
+}
+
+function isDevelopmentLocalHost(hostname) {
+  if (!hostname) return false;
+  const normalized = hostname.toLowerCase();
+  if (normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1') {
+    return true;
+  }
+  return isPrivateIpv4(normalized);
+}
+
+const PRODUCTION_ALLOWED_ORIGINS = new Set([
+  ...DEFAULT_PRODUCTION_ORIGINS.map(normalizeOrigin).filter((entry) => Boolean(entry)),
+  ...parseOriginListFromEnv(process.env.SIGNALING_CORS_ALLOWED_ORIGINS),
+  ...parseOriginListFromEnv(process.env.CORS_ALLOWED_ORIGINS),
+]);
+
+const DEVELOPMENT_ALLOWED_ORIGINS = new Set([
+  ...DEFAULT_DEVELOPMENT_ORIGINS.map(normalizeOrigin).filter((entry) => Boolean(entry)),
+  ...parseOriginListFromEnv(process.env.SIGNALING_DEV_CORS_ALLOWED_ORIGINS),
+  ...parseOriginListFromEnv(process.env.DEV_CORS_ALLOWED_ORIGINS),
+]);
+
+function isAllowedCorsOrigin(origin) {
+  // Allow non-browser/no-origin requests (health checks, server-to-server).
+  if (!origin) return true;
+
+  const normalized = normalizeOrigin(origin);
+  if (!normalized) return false;
+
+  if (IS_PRODUCTION) {
+    return PRODUCTION_ALLOWED_ORIGINS.has(normalized);
+  }
+
+  if (DEVELOPMENT_ALLOWED_ORIGINS.has(normalized)) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    return isDevelopmentLocalHost(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function corsOriginCallback(origin, callback) {
+  const allowed = isAllowedCorsOrigin(origin);
+  if (!allowed) {
+    console.warn(`[SECURITY] Blocked CORS origin: ${origin || 'unknown'}`);
+  }
+  callback(null, allowed);
+}
+
+// Shared strict CORS policy for HTTP and Socket.IO.
+app.use(cors({
+  origin: corsOriginCallback,
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Forwarded-For']
+}));
+
+// Socket.IO with shared CORS allowlist and existing transport tuning.
+const io = socketIO(server, {
+  cors: {
+    origin: corsOriginCallback,
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'],
+  allowEIO3: true,
+  pingTimeout: 180000,    // 3 minutes for very slow connections
+  pingInterval: 45000,    // Ping every 45 seconds
+  maxHttpBufferSize: 1e7,
+  perMessageDeflate: false,
+  upgradeTimeout: 60000,  // 1 minute upgrade timeout
+  allowUpgrades: true,
+  connectTimeout: 120000, // 2 minute connection timeout
+  timeout: 300000         // 5 minute total timeout
+});
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
