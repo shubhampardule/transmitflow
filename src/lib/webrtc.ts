@@ -30,6 +30,9 @@ const CONFIG = {
   MAX_RETRIES: 5,             // More retries for binary reliability
   PROGRESS_UPDATE_INTERVAL: 200,  // Faster updates for better UX
   CHUNK_TIMEOUT: 30000,       // 30 seconds for chunks (increased for mobile)
+  FILE_COMPLETE_GRACE_BINARY: 12000, // Wait for late binary chunks after FILE_COMPLETE
+  FILE_COMPLETE_GRACE_BASE64: 4000,  // Base64 is same-channel, needs less grace
+  BUFFER_DRAIN_TIMEOUT: 20000,       // Max wait for sender channel buffer drain
 };
 
 // Message types for both protocols
@@ -210,6 +213,49 @@ export class WebRTCService {
       const intervalId = setInterval(checkChannel, 50);
       checkChannel();
     });
+  }
+
+  private async waitForChannelBufferDrain(
+    channel: RTCDataChannel,
+    label: 'control' | 'binary',
+    timeoutMs: number = CONFIG.BUFFER_DRAIN_TIMEOUT,
+  ): Promise<void> {
+    const startedAt = Date.now();
+
+    while (channel.readyState === 'open' && channel.bufferedAmount > 0) {
+      if (Date.now() - startedAt >= timeoutMs) {
+        console.warn(
+          `Timed out waiting for ${label} channel buffer drain (${channel.bufferedAmount} bytes still queued)`,
+        );
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+
+  private async waitForExpectedChunks(
+    fileIndex: number,
+    expectedChunks: number,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const fileInfo = this.receivedFiles.get(fileIndex);
+      if (!fileInfo) {
+        return false;
+      }
+
+      if (fileInfo.receivedChunks.size >= expectedChunks) {
+        return true;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+
+    const fileInfo = this.receivedFiles.get(fileIndex);
+    return !!fileInfo && fileInfo.receivedChunks.size >= expectedChunks;
   }
 
   private async flushPendingIceCandidates(): Promise<void> {
@@ -425,8 +471,7 @@ export class WebRTCService {
     if (this.transferMethod === 'binary') {
       // Create binary channel optimized for high throughput with reliability
       this.binaryChannel = this.peerConnection!.createDataChannel('binary', {
-        ordered: true,   // Keep ordered for chunk integrity
-        maxRetransmits: 1,  // Minimal retransmits for speed
+        ordered: true, // Keep ordered and reliable for chunk integrity
       });
       this.binaryChannel.binaryType = 'arraybuffer';
       console.log('📺 Binary data channel created');
@@ -566,9 +611,9 @@ export class WebRTCService {
         
         // Check if this is optimized format with embedded metadata (8-byte header)
         if (data.byteLength >= 8) {
-          const headerView = new Uint32Array(data.slice(0, 8));
-          const fileIndex = headerView[0];
-          const chunkIndex = headerView[1];
+          const headerView = new DataView(data, 0, 8);
+          const fileIndex = headerView.getUint32(0, true);
+          const chunkIndex = headerView.getUint32(4, true);
           
           // Extract actual chunk data (everything after 8-byte header)
           const chunkData = data.slice(8);
@@ -752,9 +797,9 @@ export class WebRTCService {
 
       // Format: 8-byte header [fileIndex:4 + chunkIndex:4] + actual data
       const header = new ArrayBuffer(8);
-      const headerView = new Uint32Array(header);
-      headerView[0] = fileIndex;
-      headerView[1] = chunkIndex;
+      const headerView = new DataView(header);
+      headerView.setUint32(0, fileIndex, true);
+      headerView.setUint32(4, chunkIndex, true);
 
       const combinedData = new ArrayBuffer(header.byteLength + chunkArrayBuffer.byteLength);
       const combinedView = new Uint8Array(combinedData);
@@ -778,10 +823,14 @@ export class WebRTCService {
     }
 
     if (!this.cancelledFiles.has(fileIndex)) {
+      // Prevent FILE_COMPLETE from racing ahead of late binary chunks.
+      await this.waitForChannelBufferDrain(binaryChannel, 'binary');
+
       this.sendControlMessage({
         type: MSG_TYPE.FILE_COMPLETE,
         fileIndex,
         fileName: file.name,
+        totalChunks,
       });
     }
   }
@@ -896,6 +945,7 @@ export class WebRTCService {
         type: MSG_TYPE.FILE_COMPLETE,
         fileIndex,
         fileName: file.name,
+        totalChunks: chunks.length,
       });
     }
   }
@@ -1210,6 +1260,11 @@ export class WebRTCService {
       return;
     }
 
+    if (this.cancelledFiles.has(fileIndex)) {
+      console.log(`Skipping FILE_START for cancelled file ${fileIndex} (${fileName})`);
+      return;
+    }
+
     const resolvedTransferMethod: TransferMethod = transferMethod === 'binary' ? 'binary' : 'base64';
 
     console.log(`Starting to receive file ${fileIndex}: ${fileName} (${totalChunks} chunks, ${resolvedTransferMethod} mode)`);
@@ -1235,6 +1290,10 @@ export class WebRTCService {
   }
 
   private handleBinaryChunk(fileIndex: number, chunkIndex: number, data: ArrayBuffer): void {
+    if (this.cancelledFiles.has(fileIndex)) {
+      return;
+    }
+
     const fileInfo = this.receivedFiles.get(fileIndex);
     if (!fileInfo) {
       console.error(`Received chunk for unknown file ${fileIndex}`);
@@ -1261,6 +1320,10 @@ export class WebRTCService {
     // Validate chunk data
     if (fileIndex === undefined || chunkIndex === undefined || !data) {
       console.error(`❌ Invalid chunk data:`, { fileIndex, chunkIndex, dataLength: data?.length });
+      return;
+    }
+
+    if (this.cancelledFiles.has(fileIndex)) {
       return;
     }
     
@@ -1502,24 +1565,61 @@ export class WebRTCService {
   }
 
   private async handleFileComplete(message: ControlMessage): Promise<void> {
-    const { fileIndex, fileName } = message;
+    const { fileIndex, fileName, totalChunks } = message;
+
+    if (fileIndex === undefined) {
+      console.error('FILE_COMPLETE missing fileIndex');
+      return;
+    }
+
+    if (this.cancelledFiles.has(fileIndex)) {
+      console.log(`Ignoring FILE_COMPLETE for cancelled file ${fileIndex} (${fileName})`);
+      return;
+    }
     
-    const fileInfo = this.receivedFiles.get(fileIndex!);
+    let fileInfo = this.receivedFiles.get(fileIndex);
     if (!fileInfo) {
       console.error(`FILE_COMPLETE for unknown file ${fileIndex}`);
       return;
+    }
+
+    const expectedChunks =
+      typeof totalChunks === 'number' && totalChunks > 0 ? totalChunks : fileInfo.totalChunks;
+
+    if (expectedChunks > fileInfo.totalChunks) {
+      fileInfo.totalChunks = expectedChunks;
+    }
+
+    if (fileInfo.receivedChunks.size < expectedChunks) {
+      const graceMs =
+        fileInfo.transferMethod === 'binary'
+          ? CONFIG.FILE_COMPLETE_GRACE_BINARY
+          : CONFIG.FILE_COMPLETE_GRACE_BASE64;
+
+      console.warn(
+        `FILE_COMPLETE for ${fileName || `file ${fileIndex}`} arrived before all chunks (${fileInfo.receivedChunks.size}/${expectedChunks}); waiting up to ${graceMs}ms`,
+      );
+
+      await this.waitForExpectedChunks(fileIndex, expectedChunks, graceMs);
+
+      const refreshedFileInfo = this.receivedFiles.get(fileIndex);
+      if (!refreshedFileInfo) {
+        return;
+      }
+
+      fileInfo = refreshedFileInfo;
     }
     
     console.log(`🔍 File completion check for ${fileName}:`);
     console.log(`  - Expected size: ${fileInfo.metadata.size} bytes`);
     console.log(`  - Received bytes: ${fileInfo.bytesReceived} bytes`);
-    console.log(`  - Total chunks expected: ${fileInfo.totalChunks}`);
+    console.log(`  - Total chunks expected: ${expectedChunks}`);
     console.log(`  - Chunks received: ${fileInfo.receivedChunks.size}`);
     console.log(`  - Transfer method: ${fileInfo.transferMethod}`);
     
     // Validate that all chunks are received
     const missingChunks: number[] = [];
-    for (let i = 0; i < fileInfo.totalChunks; i++) {
+    for (let i = 0; i < expectedChunks; i++) {
       if (!fileInfo.receivedChunks.has(i)) {
         missingChunks.push(i);
       }
@@ -1527,13 +1627,13 @@ export class WebRTCService {
     
     if (missingChunks.length > 0) {
       console.error(`❌ File incomplete: ${fileName} (missing ${missingChunks.length} chunks: ${missingChunks.slice(0, 10).join(', ')}${missingChunks.length > 10 ? '...' : ''})`);
-      console.error(`  - Missing chunks represent ~${((missingChunks.length / fileInfo.totalChunks) * 100).toFixed(2)}% of the file`);
+      console.error(`  - Missing chunks represent ~${((missingChunks.length / expectedChunks) * 100).toFixed(2)}% of the file`);
       
-      const missingPercentage = (missingChunks.length / fileInfo.totalChunks) * 100;
+      const missingPercentage = (missingChunks.length / expectedChunks) * 100;
       
       // STRICT: No tolerance for missing chunks to ensure file integrity
       console.error(`❌ Transfer failed - missing ${missingPercentage.toFixed(2)}% of chunks`);
-      console.error(`❌ Expected ${fileInfo.totalChunks} chunks, received ${fileInfo.receivedChunks.size} chunks`);
+      console.error(`❌ Expected ${expectedChunks} chunks, received ${fileInfo.receivedChunks.size} chunks`);
       console.error(`❌ Transfer method: ${fileInfo.transferMethod}`);
       console.error(`❌ Bytes received: ${fileInfo.bytesReceived} / ${fileInfo.metadata.size}`);
       
@@ -1547,7 +1647,7 @@ export class WebRTCService {
         type: MSG_TYPE.ERROR,
         fileIndex: fileIndex!,
         fileName: fileName!,
-        message: `Transfer failed: missing ${missingChunks.length} chunks (${missingPercentage.toFixed(2)}%). Expected ${fileInfo.totalChunks} chunks, received ${fileInfo.receivedChunks.size}.`
+        message: `Transfer failed: missing ${missingChunks.length} chunks (${missingPercentage.toFixed(2)}%). Expected ${expectedChunks} chunks, received ${fileInfo.receivedChunks.size}.`
       });
       
       this.onError?.(`Transfer incomplete: ${fileName} (missing ${missingChunks.length} chunks)`);
@@ -1979,6 +2079,9 @@ export class WebRTCService {
   cancelFile(fileIndex: number, fileName: string): void {
     // Add to cancelled files set
     this.cancelledFiles.add(fileIndex);
+
+    // Ensure local partial receiver state is released immediately
+    this.receivedFiles.delete(fileIndex);
     
     // Send cancellation message to peer
     this.sendControlMessage({

@@ -275,12 +275,19 @@ export default function TransferProgress({
             <div className="space-y-3">
               {transferState.files.map((file, index) => {
                 const progress = transferState.progress.find(p => p.fileIndex === index);
-                const isCurrentFile = progress && progress.progress < 100 && isTransferring && !progress.cancelled;
-                const isCompleted = isComplete || (progress && progress.progress >= 100 && !progress.cancelled);
-                const isFileComplete = progress && progress.progress >= 100 && !progress.cancelled; // Individual file completion
-                const isCancelled = progress?.cancelled;
-                const hasProgress = progress && progress.progress > 0 && !progress.cancelled;
-                const isPendingFile = isTransferring && !hasProgress && !isCancelled; // File waiting in queue
+                const isCancelled = progress?.cancelled === true;
+                const isFileComplete = Boolean(progress && progress.progress >= 100 && !isCancelled);
+                const isCompleted = isComplete || isFileComplete;
+                const hasProgress = Boolean(progress && progress.progress > 0 && !isCancelled);
+                const isActiveFile = Boolean(
+                  isTransferring &&
+                  progress &&
+                  !isCancelled &&
+                  !isFileComplete &&
+                  (progress.stage === 'converting' || progress.progress > 0 || progress.bytesTransferred > 0)
+                );
+                const canCancelFile = Boolean(onCancelFile && isTransferring && !isCancelled && !isFileComplete);
+                const cancelButtonTitle = isActiveFile ? 'Cancel file transfer' : 'Remove from queue';
                 
                 return (
                   <div key={index} data-file-item className="border rounded-lg p-4 space-y-3">
@@ -296,7 +303,7 @@ export default function TransferProgress({
                               <> Cancelled</>
                             ) : isFileComplete ? (
                               <> Completed</>
-                            ) : hasProgress && progress ? (
+                            ) : progress && !isCancelled ? (
                               progress.stage === 'converting' ? (
                                 <> Preparing</>
                               ) : (
@@ -360,21 +367,19 @@ export default function TransferProgress({
                               </Button>
                             )}
                           </div>
-                        ) : isCurrentFile ? (
-                          // Currently transferring file - only show spinner, NO cancel button
+                        ) : isTransferring ? (
                           <div className="flex items-center gap-2">
-                            <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-                          </div>
-                        ) : isPendingFile ? (
-                          // Pending files that haven't started yet - allow individual cancellation
-                          <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full bg-muted flex-shrink-0" />
-                            {onCancelFile && (
+                            {isActiveFile ? (
+                              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-muted flex-shrink-0" />
+                            )}
+                            {canCancelFile && (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => onCancelFile(index)}
-                                title="Remove from queue"
+                                onClick={() => onCancelFile?.(index)}
+                                title={cancelButtonTitle}
                               >
                                 <X className="h-4 w-4" />
                               </Button>
@@ -387,7 +392,7 @@ export default function TransferProgress({
                     </div>
                     
                     {/* Progress Bar - Don't show for cancelled files */}
-                    {!isCancelled && (hasProgress || isCompleted) && (
+                    {!isCancelled && (Boolean(progress) || isCompleted) && (
                       <div className="space-y-1">
                         <Progress 
                           value={progress ? (progress.stage === 'converting' && progress.conversionProgress ? progress.conversionProgress : progress.progress) : (isCompleted ? 100 : 0)} 

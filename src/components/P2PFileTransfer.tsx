@@ -407,8 +407,20 @@ export default function P2PFileTransfer() {
   }, [transferState.status]);
 
   const handleCancelFile = useCallback((fileIndex: number) => {
+    if (transferStatusRef.current !== 'transferring') {
+      return;
+    }
+
     const file = transferState.files[fileIndex];
     if (!file) return;
+
+    const currentProgress = transferState.progress.find(p => p.fileIndex === fileIndex);
+    if (currentProgress?.cancelled || (currentProgress && currentProgress.progress >= 100)) {
+      return;
+    }
+    
+    const cancelledBy: 'sender' | 'receiver' =
+      webrtcService.currentRole === 'receiver' ? 'receiver' : 'sender';
     
     // Send cancellation message to peer
     webrtcService.cancelFile(fileIndex, file.name);
@@ -426,14 +438,14 @@ export default function P2PFileTransfer() {
           bytesTransferred: 0,
           totalBytes: file.size,
           cancelled: true,
-          cancelledBy: webrtcService.currentRole as 'sender' | 'receiver',
+          cancelledBy,
           stage: 'transferring' as const,
         }
       ]
     }));
     
     toast.info(`File "${file.name}" cancelled`);
-  }, [transferState.files]);
+  }, [transferState.files, transferState.progress]);
 
   const handleSendFiles = useCallback(async (files: File[]) => {
     console.log('handleSendFiles called in main component');
