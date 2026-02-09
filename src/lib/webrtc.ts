@@ -4,6 +4,7 @@
 
 import { FileMetadata, SignalingMessage } from '@/types';
 import { signalingService } from './signaling';
+import { IndexedDbChunkStore } from './chunk-store';
 
 // Detect if mobile device
 const isMobileDevice = () => {
@@ -33,6 +34,9 @@ const CONFIG = {
   FILE_COMPLETE_GRACE_BINARY: 12000, // Wait for late binary chunks after FILE_COMPLETE
   FILE_COMPLETE_GRACE_BASE64: 4000,  // Base64 is same-channel, needs less grace
   BUFFER_DRAIN_TIMEOUT: 20000,       // Max wait for sender channel buffer drain
+  CHUNK_REQUEST_BATCH_SIZE: 256,     // Limit chunk indexes per repair request
+  CHUNK_REQUEST_ATTEMPTS: 3,         // Number of repair rounds before failing
+  CHUNK_REQUEST_WAIT_MS: 5000,       // Wait window after each repair request
 };
 
 // Message types for both protocols
@@ -44,6 +48,7 @@ const MSG_TYPE = {
   FILE_COMPLETE: 'FILE_COMPLETE',
   FILE_ACK: 'FILE_ACK',                    // Acknowledgment that file was successfully received
   CHUNK_ACK: 'CHUNK_ACK',
+  CHUNK_REQUEST: 'CHUNK_REQUEST',
   TRANSFER_COMPLETE: 'TRANSFER_COMPLETE',
   PROGRESS_SYNC: 'PROGRESS_SYNC',          // Synchronize progress between sender and receiver
   CONVERSION_PROGRESS: 'CONVERSION_PROGRESS',
@@ -55,6 +60,7 @@ const MSG_TYPE = {
 } as const;
 
 type TransferMethod = 'binary' | 'base64';
+type ReceiveStorageMode = 'memory' | 'indexeddb';
 type ControlMessageType = (typeof MSG_TYPE)[keyof typeof MSG_TYPE];
 
 interface ControlMessage {
@@ -75,6 +81,7 @@ interface ControlMessage {
   stage?: 'converting' | 'transferring';
   cancelledBy?: 'sender' | 'receiver';
   transferMethod?: TransferMethod;
+  missingChunkIndices?: number[];
 }
 
 interface ReceivedFileInfo {
@@ -86,6 +93,13 @@ interface ReceivedFileInfo {
   startTime: number;
   complete: boolean;
   transferMethod: TransferMethod;
+  storageMode: ReceiveStorageMode;
+}
+
+interface SentFileProfile {
+  transferMethod: TransferMethod;
+  chunkSize: number;
+  totalChunks: number;
 }
 
 export class WebRTCService {
@@ -156,6 +170,7 @@ export class WebRTCService {
     startTime: number;
     lastProgressUpdate: number;
   }>();
+  private sentFileProfiles = new Map<number, SentFileProfile>();
   private cancelledFiles = new Set<number>(); // Track cancelled file indices
   private acknowledgedFiles = new Set<number>(); // Track files confirmed received by peer
   private transferCompleted = false; // Track if transfer finished successfully
@@ -169,6 +184,10 @@ export class WebRTCService {
   private connectionTimeout: NodeJS.Timeout | null = null;
   private pendingIceCandidates: RTCIceCandidateInit[] = [];
   private hasRemoteDescription = false;
+  private transferSessionId = '';
+  private readonly chunkStore = new IndexedDbChunkStore();
+  private pendingChunkWrites = new Map<number, Promise<void>>();
+  private pendingChunkResends = new Map<number, Promise<void>>();
   
   // Binary channel handling
   private setWaitingForChunk?: (fileIndex: number, chunkIndex: number, chunkSize: number) => void;
@@ -280,6 +299,252 @@ export class WebRTCService {
     return this.filesToSend.reduce((total, file) => total + file.size, 0);
   }
 
+  private createTransferSessionId(role: 'sender' | 'receiver', roomCode: string): string {
+    const suffix = Math.random().toString(36).slice(2, 10);
+    return `${roomCode}-${role}-${Date.now()}-${suffix}`;
+  }
+
+  private getReceiveStorageMode(fileSize: number): ReceiveStorageMode {
+    if (!this.chunkStore.isSupported()) {
+      return 'memory';
+    }
+
+    // Always prefer disk-backed chunks for large files to avoid RAM pressure.
+    if (fileSize >= 8 * 1024 * 1024) {
+      return 'indexeddb';
+    }
+
+    // For very small files memory mode is fine and usually faster.
+    return 'memory';
+  }
+
+  private enqueueChunkWrite(fileIndex: number, writeOp: () => Promise<void>): Promise<void> {
+    const previous = this.pendingChunkWrites.get(fileIndex) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(writeOp);
+
+    const tracked = next.finally(() => {
+      if (this.pendingChunkWrites.get(fileIndex) === tracked) {
+        this.pendingChunkWrites.delete(fileIndex);
+      }
+    });
+
+    this.pendingChunkWrites.set(fileIndex, tracked);
+    return tracked;
+  }
+
+  private enqueueChunkResend(fileIndex: number, resendOp: () => Promise<void>): Promise<void> {
+    const previous = this.pendingChunkResends.get(fileIndex) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(resendOp);
+
+    const tracked = next.finally(() => {
+      if (this.pendingChunkResends.get(fileIndex) === tracked) {
+        this.pendingChunkResends.delete(fileIndex);
+      }
+    });
+
+    this.pendingChunkResends.set(fileIndex, tracked);
+    return tracked;
+  }
+
+  private async waitForPendingChunkWrites(fileIndex: number): Promise<void> {
+    const pending = this.pendingChunkWrites.get(fileIndex);
+    if (!pending) return;
+
+    try {
+      await pending;
+    } catch (error) {
+      console.error(`Pending chunk writes failed for file ${fileIndex}:`, error);
+    }
+  }
+
+  private decodeBase64Chunk(base64Chunk: string): Uint8Array {
+    const binaryString = atob(base64Chunk);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  private getMissingChunkIndices(fileInfo: ReceivedFileInfo, expectedChunks: number): number[] {
+    const missingChunks: number[] = [];
+    for (let i = 0; i < expectedChunks; i++) {
+      if (!fileInfo.receivedChunks.has(i)) {
+        missingChunks.push(i);
+      }
+    }
+    return missingChunks;
+  }
+
+  private async fileSliceToBase64(slice: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      const timeout = setTimeout(() => reject(new Error('FileReader timeout during resend')), 15000);
+
+      reader.onload = () => {
+        clearTimeout(timeout);
+        const result = reader.result as string;
+        const commaIndex = result.indexOf(',');
+        if (commaIndex === -1) {
+          reject(new Error('Invalid FileReader DataURL result'));
+          return;
+        }
+        resolve(result.slice(commaIndex + 1));
+      };
+
+      reader.onerror = () => {
+        clearTimeout(timeout);
+        reject(reader.error ?? new Error('FileReader failed during resend'));
+      };
+
+      reader.readAsDataURL(slice);
+    });
+  }
+
+  private async resendRequestedChunks(fileIndex: number, chunkIndices: number[]): Promise<void> {
+    if (this.role !== 'sender') return;
+    if (chunkIndices.length === 0) return;
+    if (this.cancelledFiles.has(fileIndex)) return;
+
+    const file = this.filesToSend[fileIndex];
+    const profile = this.sentFileProfiles.get(fileIndex);
+    if (!file || !profile) {
+      console.warn(`Cannot resend chunks for file ${fileIndex}: sender metadata missing`);
+      return;
+    }
+
+    const uniqueChunkIndices = Array.from(
+      new Set(
+        chunkIndices.filter(
+          (chunkIndex) => Number.isInteger(chunkIndex) && chunkIndex >= 0 && chunkIndex < profile.totalChunks,
+        ),
+      ),
+    ).sort((a, b) => a - b);
+
+    if (uniqueChunkIndices.length === 0) return;
+
+    console.log(
+      `Resending ${uniqueChunkIndices.length} chunks for file ${fileIndex} (${profile.transferMethod})`,
+    );
+
+    if (profile.transferMethod === 'binary') {
+      const binaryChannel = await this.waitForChannelOpen(() => this.binaryChannel, 'binary', 12000);
+
+      for (const chunkIndex of uniqueChunkIndices) {
+        if (this.cancelledFiles.has(fileIndex)) return;
+        if (binaryChannel.readyState !== 'open') {
+          throw new Error('Binary channel closed while resending chunks');
+        }
+
+        while (binaryChannel.bufferedAmount > this.bufferThreshold) {
+          if (binaryChannel.readyState !== 'open') {
+            throw new Error('Binary channel closed while waiting for resend buffer drain');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+
+        const start = chunkIndex * profile.chunkSize;
+        if (start >= file.size) continue;
+        const end = Math.min(start + profile.chunkSize, file.size);
+        const chunkArrayBuffer = await file.slice(start, end).arrayBuffer();
+
+        const header = new ArrayBuffer(8);
+        const headerView = new DataView(header);
+        headerView.setUint32(0, fileIndex, true);
+        headerView.setUint32(4, chunkIndex, true);
+
+        const combinedData = new ArrayBuffer(header.byteLength + chunkArrayBuffer.byteLength);
+        const combinedView = new Uint8Array(combinedData);
+        combinedView.set(new Uint8Array(header), 0);
+        combinedView.set(new Uint8Array(chunkArrayBuffer), header.byteLength);
+
+        binaryChannel.send(combinedData);
+      }
+    } else {
+      const chunks = this.sendChunksMap.get(fileIndex);
+
+      for (const chunkIndex of uniqueChunkIndices) {
+        if (this.cancelledFiles.has(fileIndex)) return;
+
+        let base64Chunk = chunks?.[chunkIndex];
+        if (!base64Chunk) {
+          const start = chunkIndex * profile.chunkSize;
+          if (start >= file.size) continue;
+          const end = Math.min(start + profile.chunkSize, file.size);
+          base64Chunk = await this.fileSliceToBase64(file.slice(start, end));
+          if (chunks) {
+            chunks[chunkIndex] = base64Chunk;
+          }
+        }
+
+        await this.sendChunkWithFlowControl(fileIndex, chunkIndex, base64Chunk);
+      }
+    }
+  }
+
+  private async requestMissingChunksFromSender(
+    fileIndex: number,
+    fileName: string,
+    expectedChunks: number,
+  ): Promise<number[]> {
+    if (this.role !== 'receiver') return [];
+
+    let fileInfo = this.receivedFiles.get(fileIndex);
+    if (!fileInfo) return [];
+
+    let missingChunks = this.getMissingChunkIndices(fileInfo, expectedChunks);
+    if (missingChunks.length === 0) return [];
+
+    for (let attempt = 1; attempt <= CONFIG.CHUNK_REQUEST_ATTEMPTS && missingChunks.length > 0; attempt++) {
+      console.warn(
+        `Chunk recovery attempt ${attempt}/${CONFIG.CHUNK_REQUEST_ATTEMPTS} for file ${fileIndex}: requesting ${missingChunks.length} chunks`,
+      );
+
+      this.onStatusMessage?.(
+        `Recovering ${missingChunks.length} missing chunks (${attempt}/${CONFIG.CHUNK_REQUEST_ATTEMPTS})...`,
+      );
+
+      for (let offset = 0; offset < missingChunks.length; offset += CONFIG.CHUNK_REQUEST_BATCH_SIZE) {
+        const batch = missingChunks.slice(offset, offset + CONFIG.CHUNK_REQUEST_BATCH_SIZE);
+        this.sendControlMessage({
+          type: MSG_TYPE.CHUNK_REQUEST,
+          fileIndex,
+          fileName,
+          missingChunkIndices: batch,
+        });
+      }
+
+      const waitMs = Math.min(
+        CONFIG.CHUNK_REQUEST_WAIT_MS + (missingChunks.length * 20),
+        CONFIG.CHUNK_REQUEST_WAIT_MS * 3,
+      );
+      await this.waitForExpectedChunks(fileIndex, expectedChunks, waitMs);
+      await this.waitForPendingChunkWrites(fileIndex);
+
+      fileInfo = this.receivedFiles.get(fileIndex);
+      if (!fileInfo) {
+        return missingChunks;
+      }
+
+      missingChunks = this.getMissingChunkIndices(fileInfo, expectedChunks);
+    }
+
+    return missingChunks;
+  }
+
+  private clearStoredChunksForSession(sessionId: string): void {
+    if (!sessionId) return;
+    if (!this.chunkStore.isSupported()) return;
+
+    void this.chunkStore.clearSession(sessionId).catch((error) => {
+      console.warn(`Failed to clear stored chunks for session ${sessionId}:`, error);
+    });
+  }
+
   private notifyServerTransferStart(): void {
     if (this.role !== 'sender' || !this.roomCode || this.serverTransferActive) {
       return;
@@ -314,19 +579,24 @@ export class WebRTCService {
     console.log(`🚀 Initializing as SENDER for room: ${roomCode}`);
     console.log(`📁 Files to send: ${files.length} (${files.map(f => f.name).join(', ')})`);
     
+    this.clearStoredChunksForSession(this.transferSessionId);
     this.roomCode = roomCode;
     this.role = 'sender';
     this.filesToSend = files;
+    this.transferSessionId = this.createTransferSessionId('sender', roomCode);
     
     // Reset tracking for new transfer
     this.cancelledFiles.clear();
     this.acknowledgedFiles.clear();
     this.sendProgressMap.clear();
+    this.sentFileProfiles.clear();
     this.sendChunksMap.clear();
     this.receivedFiles.clear();
     this.expectedFiles = [];
     this.pendingIceCandidates = [];
     this.hasRemoteDescription = false;
+    this.pendingChunkWrites.clear();
+    this.pendingChunkResends.clear();
     this.transferCompleted = false;
     this.transferStarted = false;
     this.serverTransferActive = false;
@@ -370,13 +640,17 @@ export class WebRTCService {
   async initializeAsReceiver(roomCode: string): Promise<void> {
     console.log(`📥 Initializing as RECEIVER for room: ${roomCode}`);
     
+    this.clearStoredChunksForSession(this.transferSessionId);
     this.roomCode = roomCode;
     this.role = 'receiver';
+    this.transferSessionId = this.createTransferSessionId('receiver', roomCode);
     this.receivedFiles.clear();
     this.expectedFiles = [];
     this.cancelledFiles.clear();
     this.pendingIceCandidates = [];
     this.hasRemoteDescription = false;
+    this.pendingChunkWrites.clear();
+    this.pendingChunkResends.clear();
     this.transferCompleted = false;
     this.transferStarted = false;
     this.serverTransferActive = false;
@@ -619,7 +893,7 @@ export class WebRTCService {
           const chunkData = data.slice(8);
           
           console.log(`📦 Received optimized binary chunk ${chunkIndex} for file ${fileIndex} (${chunkData.byteLength} bytes + 8 byte header)`);
-          this.handleBinaryChunk(fileIndex, chunkIndex, chunkData);
+          void this.handleBinaryChunk(fileIndex, chunkIndex, chunkData);
         } else {
           // Legacy format - try to match with expected chunks
           let matchingChunk: { fileIndex: number; chunkIndex: number; chunkSize: number; timeout: NodeJS.Timeout } | null = null;
@@ -635,7 +909,7 @@ export class WebRTCService {
           
           if (matchingChunk) {
             console.log(`📦 Received legacy binary chunk ${matchingChunk.chunkIndex} for file ${matchingChunk.fileIndex} (${data.byteLength} bytes)`);
-            this.handleBinaryChunk(matchingChunk.fileIndex, matchingChunk.chunkIndex, data);
+            void this.handleBinaryChunk(matchingChunk.fileIndex, matchingChunk.chunkIndex, data);
           } else {
             console.error(`❌ Received unexpected binary data: ${data.byteLength} bytes, no matching expected chunk`);
           }
@@ -750,6 +1024,11 @@ export class WebRTCService {
     }
 
     const totalChunks = Math.ceil(file.size / dynamicChunkSize);
+    this.sentFileProfiles.set(fileIndex, {
+      transferMethod: 'binary',
+      chunkSize: dynamicChunkSize,
+      totalChunks,
+    });
 
     console.log(`Sending ${file.name} via binary: ${totalChunks} chunks of ${dynamicChunkSize / 1024}KB`);
 
@@ -876,6 +1155,11 @@ export class WebRTCService {
     if (chunks.length === 0) return; // Cancelled during conversion
     
     this.sendChunksMap.set(fileIndex, chunks);
+    this.sentFileProfiles.set(fileIndex, {
+      transferMethod: 'base64',
+      chunkSize: this.chunkSize,
+      totalChunks: chunks.length,
+    });
     
     // Initialize progress tracking
     this.sendProgressMap.set(fileIndex, {
@@ -1212,6 +1496,10 @@ export class WebRTCService {
       case MSG_TYPE.CHUNK_ACK:
         console.log(`📨 Chunk ACK received:`, message);
         break;
+
+      case MSG_TYPE.CHUNK_REQUEST:
+        this.handleChunkRequest(message);
+        break;
         
       case MSG_TYPE.TRANSFER_COMPLETE:
         this.transferCompleted = true;
@@ -1266,8 +1554,11 @@ export class WebRTCService {
     }
 
     const resolvedTransferMethod: TransferMethod = transferMethod === 'binary' ? 'binary' : 'base64';
+    const storageMode = this.getReceiveStorageMode(fileSize);
 
-    console.log(`Starting to receive file ${fileIndex}: ${fileName} (${totalChunks} chunks, ${resolvedTransferMethod} mode)`);
+    console.log(
+      `Starting to receive file ${fileIndex}: ${fileName} (${totalChunks} chunks, ${resolvedTransferMethod} mode, ${storageMode} storage)`,
+    );
 
     this.receivedFiles.set(fileIndex, {
       metadata: {
@@ -1284,6 +1575,7 @@ export class WebRTCService {
       startTime: Date.now(),
       complete: false,
       transferMethod: resolvedTransferMethod,
+      storageMode,
     });
     
     this.onStatusMessage?.(`Receiving ${fileName}...`);
@@ -1304,22 +1596,38 @@ export class WebRTCService {
       console.warn(`Duplicate chunk ${chunkIndex} for file ${fileIndex}`);
       return;
     }
-    
-    fileInfo.chunks.set(chunkIndex, data);
+
     fileInfo.receivedChunks.add(chunkIndex);
-    fileInfo.bytesReceived += data.byteLength; // Track actual bytes received
-    
-    console.log(`File ${fileIndex}: Received binary chunk ${chunkIndex}/${fileInfo.totalChunks - 1} (${data.byteLength} bytes) - Total: ${fileInfo.bytesReceived}/${fileInfo.metadata.size} bytes`);
-    
+    fileInfo.bytesReceived += data.byteLength;
+
+    if (fileInfo.storageMode === 'indexeddb') {
+      const sessionId = this.transferSessionId;
+      void this.enqueueChunkWrite(fileIndex, async () => {
+        await this.chunkStore.putChunk(sessionId, fileIndex, chunkIndex, data);
+      }).catch((error) => {
+        const latestFileInfo = this.receivedFiles.get(fileIndex);
+        latestFileInfo?.receivedChunks.delete(chunkIndex);
+        if (latestFileInfo) {
+          latestFileInfo.bytesReceived = Math.max(0, latestFileInfo.bytesReceived - data.byteLength);
+        }
+        this.onError?.(`Failed to persist received chunk: ${error instanceof Error ? error.message : 'unknown error'}`);
+      });
+    } else {
+      fileInfo.chunks.set(chunkIndex, data);
+    }
+
+    console.log(
+      `File ${fileIndex}: Received binary chunk ${chunkIndex}/${fileInfo.totalChunks - 1} (${data.byteLength} bytes) - Total: ${fileInfo.bytesReceived}/${fileInfo.metadata.size} bytes`,
+    );
+
     this.updateReceiveProgress(fileIndex, fileInfo);
   }
 
   private handleBase64Chunk(message: ControlMessage): void {
     const { fileIndex, chunkIndex, data } = message;
     
-    // Validate chunk data
     if (fileIndex === undefined || chunkIndex === undefined || !data) {
-      console.error(`❌ Invalid chunk data:`, { fileIndex, chunkIndex, dataLength: data?.length });
+      console.error('Invalid chunk data:', { fileIndex, chunkIndex, dataLength: data?.length });
       return;
     }
 
@@ -1329,49 +1637,61 @@ export class WebRTCService {
     
     const fileInfo = this.receivedFiles.get(fileIndex);
     if (!fileInfo) {
-      console.error(`❌ Received chunk for unknown file ${fileIndex}`);
+      console.error(`Received chunk for unknown file ${fileIndex}`);
       return;
     }
     
     if (fileInfo.receivedChunks.has(chunkIndex)) {
-      console.warn(`⚠️ Duplicate chunk ${chunkIndex} for file ${fileIndex} - ignoring`);
+      console.warn(`Duplicate chunk ${chunkIndex} for file ${fileIndex} - ignoring`);
       return;
     }
-    
-    // Validate Base64 data
+
+    let decodedBytes: Uint8Array;
     try {
-      // Test if it's valid Base64
-      atob(data.substring(0, Math.min(data.length, 100))); // Test first 100 chars
+      decodedBytes = this.decodeBase64Chunk(data);
     } catch (error) {
-      console.error(`❌ Invalid Base64 data in chunk ${chunkIndex} for file ${fileIndex}:`, error);
+      console.error(`Invalid Base64 data in chunk ${chunkIndex} for file ${fileIndex}:`, error);
       return;
     }
     
-    // Store chunk and mark as received
-    fileInfo.chunks.set(chunkIndex, data);
     fileInfo.receivedChunks.add(chunkIndex);
+    fileInfo.bytesReceived += decodedBytes.byteLength;
+
+    if (fileInfo.storageMode === 'indexeddb') {
+      const sessionId = this.transferSessionId;
+      const chunkToStore = decodedBytes;
+      void this.enqueueChunkWrite(fileIndex, async () => {
+        await this.chunkStore.putChunk(sessionId, fileIndex, chunkIndex, chunkToStore);
+      }).catch((error) => {
+        const latestFileInfo = this.receivedFiles.get(fileIndex);
+        latestFileInfo?.receivedChunks.delete(chunkIndex);
+        if (latestFileInfo) {
+          latestFileInfo.bytesReceived = Math.max(0, latestFileInfo.bytesReceived - chunkToStore.byteLength);
+        }
+        this.onError?.(`Failed to persist received chunk: ${error instanceof Error ? error.message : 'unknown error'}`);
+      });
+    } else {
+      fileInfo.chunks.set(chunkIndex, data);
+    }
     
-    // Estimate bytes for Base64 (3/4 ratio)
-    const estimatedBytes = Math.floor((data.length * 3) / 4);
-    fileInfo.bytesReceived += estimatedBytes;
+    console.log(
+      `Chunk ${chunkIndex}/${fileInfo.totalChunks - 1} received for file ${fileIndex} (${data.length} chars, ${decodedBytes.byteLength} bytes)`,
+    );
     
-    // Enhanced logging for debugging
-    console.log(`✓ Chunk ${chunkIndex}/${fileInfo.totalChunks - 1} received for file ${fileIndex} (${data.length} chars, ~${estimatedBytes} bytes)`);
-    
-    // Log progress more frequently for debugging
     if (fileInfo.receivedChunks.size % 5 === 0 || fileInfo.receivedChunks.size === fileInfo.totalChunks) {
-      console.log(`📊 File ${fileIndex} progress: ${fileInfo.receivedChunks.size}/${fileInfo.totalChunks} chunks (${((fileInfo.receivedChunks.size / fileInfo.totalChunks) * 100).toFixed(1)}%) - Bytes: ${fileInfo.bytesReceived}/${fileInfo.metadata.size}`);
+      console.log(
+        `File ${fileIndex} progress: ${fileInfo.receivedChunks.size}/${fileInfo.totalChunks} chunks (${((fileInfo.receivedChunks.size / fileInfo.totalChunks) * 100).toFixed(1)}%) - Bytes: ${fileInfo.bytesReceived}/${fileInfo.metadata.size}`,
+      );
     }
     
     this.updateReceiveProgress(fileIndex, fileInfo);
     
-    // Send chunk acknowledgment back to sender for debugging
     if (fileInfo.receivedChunks.size % 10 === 0) {
       this.sendControlMessage({
         type: MSG_TYPE.CHUNK_ACK,
         fileIndex,
         chunkIndex,
-        message: `Received ${fileInfo.receivedChunks.size}/${fileInfo.totalChunks} chunks`
+        message: `Received ${fileInfo.receivedChunks.size}/${fileInfo.totalChunks} chunks`,
       });
     }
   }
@@ -1381,7 +1701,15 @@ export class WebRTCService {
     
     if (fileIndex !== undefined) {
       this.cancelledFiles.add(fileIndex);
+      this.pendingChunkWrites.delete(fileIndex);
+      this.pendingChunkResends.delete(fileIndex);
       this.receivedFiles.delete(fileIndex);
+
+      if (this.transferSessionId) {
+        void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch((error) => {
+          console.warn(`Failed to clear stored chunks for cancelled file ${fileIndex}:`, error);
+        });
+      }
       
       this.onFileCancelled?.({
         fileIndex,
@@ -1391,6 +1719,21 @@ export class WebRTCService {
       
       console.log(`File ${fileIndex} (${fileName}) cancelled by ${cancelledBy}`);
     }
+  }
+
+  private handleChunkRequest(message: ControlMessage): void {
+    if (this.role !== 'sender') {
+      return;
+    }
+
+    const { fileIndex, missingChunkIndices } = message;
+    if (fileIndex === undefined || !Array.isArray(missingChunkIndices) || missingChunkIndices.length === 0) {
+      return;
+    }
+
+    void this.enqueueChunkResend(fileIndex, () => this.resendRequestedChunks(fileIndex, missingChunkIndices)).catch((error) => {
+      console.error(`Failed to resend requested chunks for file ${fileIndex}:`, error);
+    });
   }
 
   private handleFileAck(message: ControlMessage): void {
@@ -1583,6 +1926,14 @@ export class WebRTCService {
       return;
     }
 
+    await this.waitForPendingChunkWrites(fileIndex);
+
+    const latestInfoAfterWrites = this.receivedFiles.get(fileIndex);
+    if (!latestInfoAfterWrites) {
+      return;
+    }
+    fileInfo = latestInfoAfterWrites;
+
     const expectedChunks =
       typeof totalChunks === 'number' && totalChunks > 0 ? totalChunks : fileInfo.totalChunks;
 
@@ -1601,6 +1952,7 @@ export class WebRTCService {
       );
 
       await this.waitForExpectedChunks(fileIndex, expectedChunks, graceMs);
+      await this.waitForPendingChunkWrites(fileIndex);
 
       const refreshedFileInfo = this.receivedFiles.get(fileIndex);
       if (!refreshedFileInfo) {
@@ -1618,11 +1970,14 @@ export class WebRTCService {
     console.log(`  - Transfer method: ${fileInfo.transferMethod}`);
     
     // Validate that all chunks are received
-    const missingChunks: number[] = [];
-    for (let i = 0; i < expectedChunks; i++) {
-      if (!fileInfo.receivedChunks.has(i)) {
-        missingChunks.push(i);
-      }
+    let missingChunks = this.getMissingChunkIndices(fileInfo, expectedChunks);
+
+    if (missingChunks.length > 0 && this.role === 'receiver') {
+      missingChunks = await this.requestMissingChunksFromSender(
+        fileIndex,
+        fileName || fileInfo.metadata.name,
+        expectedChunks,
+      );
     }
     
     if (missingChunks.length > 0) {
@@ -1650,6 +2005,10 @@ export class WebRTCService {
         message: `Transfer failed: missing ${missingChunks.length} chunks (${missingPercentage.toFixed(2)}%). Expected ${expectedChunks} chunks, received ${fileInfo.receivedChunks.size}.`
       });
       
+      if (fileInfo.storageMode === 'indexeddb' && this.transferSessionId) {
+        void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch(() => undefined);
+      }
+
       this.onError?.(`Transfer incomplete: ${fileName} (missing ${missingChunks.length} chunks)`);
       return;
     } else {
@@ -1659,7 +2018,27 @@ export class WebRTCService {
     try {
       let file: File;
       
-      if (fileInfo.transferMethod === 'binary') {
+      if (fileInfo.storageMode === 'indexeddb') {
+        const persisted = await this.chunkStore.getFileChunks(this.transferSessionId, fileIndex, expectedChunks);
+        if (persisted.missingChunkIndices.length > 0) {
+          const missingPreview = persisted.missingChunkIndices.slice(0, 10).join(', ');
+          this.onError?.(
+            `Transfer incomplete: ${fileName} (missing ${persisted.missingChunkIndices.length} persisted chunks: ${missingPreview}${persisted.missingChunkIndices.length > 10 ? '...' : ''})`,
+          );
+          if (this.transferSessionId) {
+            void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch(() => undefined);
+          }
+          return;
+        }
+
+        const persistedBlob = new Blob(persisted.chunks, {
+          type: fileInfo.metadata.type || 'application/octet-stream',
+        });
+        file = new File([persistedBlob], fileInfo.metadata.name, {
+          type: fileInfo.metadata.type || 'application/octet-stream',
+          lastModified: fileInfo.metadata.lastModified,
+        });
+      } else if (fileInfo.transferMethod === 'binary') {
         // Reconstruct from ArrayBuffer chunks with memory management
         console.log('Reconstructing large binary file with memory optimization...');
         
@@ -1902,9 +2281,17 @@ export class WebRTCService {
       });
       
       console.log(`📤 Sent FILE_ACK for ${fileName} back to sender`);
+      if (fileInfo.storageMode === 'indexeddb' && this.transferSessionId) {
+        void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch((cleanupError) => {
+          console.warn(`Failed to clear persisted chunks for file ${fileIndex}:`, cleanupError);
+        });
+      }
       
     } catch (error) {
       console.error(`Failed to reconstruct file ${fileName}:`, error);
+      if (fileInfo.storageMode === 'indexeddb' && this.transferSessionId) {
+        void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch(() => undefined);
+      }
       this.onError?.(`Failed to process ${fileName}: ${error}`);
     }
   }
@@ -2024,6 +2411,8 @@ export class WebRTCService {
   }
 
   cleanup(): void {
+    const sessionIdToClear = this.transferSessionId;
+
     this.clearConnectionTimeout();
 
     if (!this.transferCompleted && this.serverTransferActive) {
@@ -2052,19 +2441,24 @@ export class WebRTCService {
     this.currentSendIndex = 0;
     this.sendChunksMap.clear();
     this.sendProgressMap.clear();
+    this.sentFileProfiles.clear();
     this.receivedFiles.clear();
     this.expectedFiles = [];
     this.cancelledFiles.clear();
     this.acknowledgedFiles.clear();
+    this.pendingChunkWrites.clear();
+    this.pendingChunkResends.clear();
     this.transferCompleted = false;
     this.transferStarted = false;
     this.serverTransferActive = false;
     this.pendingIceCandidates = [];
     this.hasRemoteDescription = false;
     this.setWaitingForChunk = undefined;
+    this.transferSessionId = '';
     this.role = null;
     this.roomCode = '';
     
+    this.clearStoredChunksForSession(sessionIdToClear);
     this.onStatusMessage?.('Disconnected');
   }
 
@@ -2079,9 +2473,14 @@ export class WebRTCService {
   cancelFile(fileIndex: number, fileName: string): void {
     // Add to cancelled files set
     this.cancelledFiles.add(fileIndex);
+    this.pendingChunkWrites.delete(fileIndex);
+    this.pendingChunkResends.delete(fileIndex);
 
     // Ensure local partial receiver state is released immediately
     this.receivedFiles.delete(fileIndex);
+    if (this.transferSessionId) {
+      void this.chunkStore.clearFile(this.transferSessionId, fileIndex).catch(() => undefined);
+    }
     
     // Send cancellation message to peer
     this.sendControlMessage({
@@ -2093,6 +2492,7 @@ export class WebRTCService {
     
     // Remove from send progress if it exists
     this.sendProgressMap.delete(fileIndex);
+    this.sentFileProfiles.delete(fileIndex);
     this.sendChunksMap.delete(fileIndex);
     
     console.log(`Cancelled file ${fileIndex} (${fileName})`);
@@ -2100,3 +2500,5 @@ export class WebRTCService {
 }
 
 export const webrtcService = new WebRTCService();
+
+

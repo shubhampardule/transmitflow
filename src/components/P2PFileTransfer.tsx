@@ -18,6 +18,35 @@ import ReceiveFilesPanel from './ReceiveFilesPanel';
 import TransferProgress from './TransferProgress';
 import ThemeToggle from './ui/ThemeToggle';
 
+type TransferStatus = TransferState['status'];
+type TerminalTransferStatus = Extract<TransferStatus, 'completed' | 'error' | 'cancelled'>;
+
+const isTerminalStatus = (status: TransferStatus): status is TerminalTransferStatus => (
+  status === 'completed' || status === 'error' || status === 'cancelled'
+);
+
+const toUserFriendlyError = (error: string): string => {
+  const message = error.trim();
+
+  if (/transfer incomplete|missing \d+ chunks/i.test(message)) {
+    return 'Transfer incomplete. Some file data did not arrive. Please retry.';
+  }
+
+  if (/connection timeout/i.test(message)) {
+    return 'Connection timed out. Check the room code and try again.';
+  }
+
+  if (/connection lost/i.test(message)) {
+    return 'Connection was lost during transfer. Please retry.';
+  }
+
+  if (/connection failed/i.test(message)) {
+    return 'Connection failed. Please retry.';
+  }
+
+  return message;
+};
+
 export default function P2PFileTransfer() {
   console.log('=== P2PFileTransfer COMPONENT RENDERING ===');
   
@@ -37,19 +66,116 @@ export default function P2PFileTransfer() {
   const [roomCode, setRoomCode] = useState('');
   const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
   const [hasNavigatedToSharing, setHasNavigatedToSharing] = useState(false);
-  const [transferCompleted, setTransferCompleted] = useState(false);
   const transferStatusRef = useRef<TransferState['status']>('idle');
+  const transferCompletedRef = useRef(false);
+  const transferFinalizedRef = useRef(false);
+  const transferSessionActiveRef = useRef(false);
+  const transferStartedToastShownRef = useRef(false);
+  const autoDownloadFailureToastShownRef = useRef(false);
+  const shownToastKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     transferStatusRef.current = transferState.status;
   }, [transferState.status]);
 
+  const notifyOnce = useCallback((
+    key: string,
+    level: 'success' | 'error' | 'warning' | 'info',
+    message: string,
+    options?: { description?: string; duration?: number },
+  ) => {
+    if (shownToastKeysRef.current.has(key)) {
+      return;
+    }
+    shownToastKeysRef.current.add(key);
+    toast[level](message, options);
+  }, []);
+
+  const resetTransferRuntimeState = useCallback(() => {
+    transferCompletedRef.current = false;
+    transferFinalizedRef.current = false;
+    transferSessionActiveRef.current = false;
+    transferStartedToastShownRef.current = false;
+    autoDownloadFailureToastShownRef.current = false;
+    shownToastKeysRef.current.clear();
+  }, []);
+
+  const beginTransferSession = useCallback(() => {
+    transferCompletedRef.current = false;
+    transferFinalizedRef.current = false;
+    transferSessionActiveRef.current = true;
+    transferStartedToastShownRef.current = false;
+    autoDownloadFailureToastShownRef.current = false;
+    shownToastKeysRef.current.clear();
+  }, []);
+
+  const updateTransferStatus = useCallback((nextStatus: TransferStatus, error?: string) => {
+    setTransferState((prev) => {
+      if (isTerminalStatus(prev.status) && !isTerminalStatus(nextStatus)) {
+        return prev;
+      }
+
+      if (isTerminalStatus(prev.status) && isTerminalStatus(nextStatus) && prev.status !== nextStatus) {
+        return prev;
+      }
+
+      const clearError =
+        nextStatus === 'connecting' || nextStatus === 'transferring' || nextStatus === 'completed';
+      const nextError = clearError ? undefined : error ?? prev.error;
+
+      if (prev.status === nextStatus && prev.error === nextError) {
+        return prev;
+      }
+
+      return { ...prev, status: nextStatus, error: nextError };
+    });
+  }, []);
+
+  const finalizeTransfer = useCallback((
+    status: TerminalTransferStatus,
+    toastMessage: string,
+    errorText?: string,
+  ) => {
+    if (transferFinalizedRef.current) {
+      return;
+    }
+
+    transferFinalizedRef.current = true;
+    transferSessionActiveRef.current = false;
+    transferCompletedRef.current = status === 'completed';
+
+    updateTransferStatus(
+      status,
+      status === 'completed' ? undefined : (errorText ?? toastMessage),
+    );
+
+    notifyOnce(
+      `transfer-${status}`,
+      status === 'completed' ? 'success' : status === 'cancelled' ? 'warning' : 'error',
+      toastMessage,
+    );
+  }, [notifyOnce, updateTransferStatus]);
+
+  const markTransferStarted = useCallback(() => {
+    if (transferFinalizedRef.current || !transferSessionActiveRef.current) {
+      return;
+    }
+
+    updateTransferStatus('transferring');
+
+    if (!transferStartedToastShownRef.current) {
+      transferStartedToastShownRef.current = true;
+      notifyOnce('transfer-started', 'info', 'Transfer started');
+    }
+  }, [notifyOnce, updateTransferStatus]);
+
   // Define handleReset first since other functions depend on it
   const handleReset = useCallback(() => {
     webrtcService.cleanup();
+    signalingService.removeAllListeners();
+    resetTransferRuntimeState();
     setRoomCode('');
     setReceivedFiles([]);
-    setTransferCompleted(false);
     setTransferState({
       status: 'idle',
       files: [],
@@ -67,7 +193,7 @@ export default function P2PFileTransfer() {
     }
     
     console.log('Reset complete - redirected to main page');
-  }, []);
+  }, [resetTransferRuntimeState]);
 
   // Auto-switch to receive tab when QR code URL is detected (client-side only)
   useEffect(() => {
@@ -132,70 +258,69 @@ export default function P2PFileTransfer() {
 
     // Set up signaling event handlers
     signalingService.onRoomFull((data) => {
-      toast.error(`Room ${data.room} is full! Only 2 people can share files at once.`);
-      setTransferState(prev => ({ ...prev, status: 'error', error: 'Room is full' }));
+      if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
+        return;
+      }
+      const message = `Room ${data.room} is full. Only 2 people can share files at once.`;
+      finalizeTransfer('error', message, 'Room is full.');
     });
 
     signalingService.onRoomBusy((data) => {
-      toast.error(`Room ${data.room} is currently transferring files. Please try again later.`);
-      setTransferState(prev => ({ ...prev, status: 'error', error: 'Room is busy' }));
+      if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
+        return;
+      }
+      const message = `Room ${data.room} is currently busy with another transfer.`;
+      finalizeTransfer('error', message, 'Room is busy.');
     });
 
     signalingService.onRoomExpired(() => {
-      toast.error('This share session has expired. Please create a new one.');
-      handleReset();
+      if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
+        return;
+      }
+      const message = 'This share session has expired. Start a new transfer.';
+      finalizeTransfer('error', message, message);
     });
 
     signalingService.onPeerDisconnected((peerId) => {
       console.log('Peer disconnected:', peerId);
-      handleReset();
+      if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
+        return;
+      }
+      const message = 'Peer disconnected before transfer completed.';
+      finalizeTransfer('error', message, message);
     });
 
     signalingService.onTransferStarted(() => {
-      if (transferStatusRef.current === 'connecting') {
-        setTransferState(prev => ({ ...prev, status: 'transferring' }));
-      }
-      toast.info('Transfer started');
+      markTransferStarted();
     });
 
     signalingService.onTransferCompleted((data) => {
-      if (transferStatusRef.current === 'completed' || transferStatusRef.current === 'cancelled') {
-        return;
-      }
-
-      if (transferStatusRef.current !== 'error') {
-        setTransferCompleted(true);
-        setTransferState(prev => ({ ...prev, status: 'completed' }));
-      }
-
-      const durationText = data.duration ? ` in ${Math.round(data.duration)}s` : '';
-      toast.success(`Transfer session completed${durationText}`);
+      // Treat server completion as informational only; local WebRTC completion remains authoritative.
+      console.log('Signaling transfer-completed event:', data);
     });
 
     signalingService.onTransferCancelled((data) => {
-      if (transferStatusRef.current === 'completed' || transferStatusRef.current === 'cancelled') {
+      if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
         return;
       }
 
       const raw = data.cancelledBy;
       const cancelledBy: 'sender' | 'receiver' | 'system' =
         raw === 'sender' || raw === 'receiver' || raw === 'system' ? raw : 'system';
-      const reasonSuffix = data.reason ? ` (${data.reason})` : '';
 
-      setTransferState(prev => ({
-        ...prev,
-        status: 'cancelled',
-        error: `Transfer cancelled by ${cancelledBy}${reasonSuffix}`,
-      }));
+      const message =
+        cancelledBy === 'system'
+          ? 'Transfer was cancelled.'
+          : `Transfer cancelled by ${cancelledBy}.`;
 
-      toast.warning(`Transfer cancelled by ${cancelledBy}${reasonSuffix}`);
+      finalizeTransfer('cancelled', message, message);
     });
 
     return () => {
       webrtcService.cleanup();
       signalingService.disconnect();
     };
-  }, [handleReset]);
+  }, [finalizeTransfer, markTransferStarted]);
 
   // Handle browser back button
   useEffect(() => {
@@ -241,122 +366,146 @@ export default function P2PFileTransfer() {
   useEffect(() => {
     webrtcService.onConnectionStateChange = (state) => {
       console.log('WebRTC connection state:', state);
+      if (!transferSessionActiveRef.current && !transferFinalizedRef.current) {
+        return;
+      }
+
       if (state === 'connected') {
-        setTransferState(prev => {
-          if (prev.status === 'cancelled' || prev.status === 'completed') {
-            return prev;
-          }
-          return { ...prev, status: 'connecting' };
-        });
+        if (!transferFinalizedRef.current) {
+          updateTransferStatus('connecting');
+        }
       } else if (state === 'failed') {
-        setTransferState(prev => {
-          if (prev.status === 'cancelled' || prev.status === 'completed') {
-            return prev;
-          }
-          return { ...prev, status: 'error', error: 'Connection failed' };
-        });
+        finalizeTransfer('error', 'Connection failed. Please try again.', 'Connection failed.');
       } else if (state === 'disconnected') {
-        // Ignore expected disconnects after terminal states
-        if (!transferCompleted && transferStatusRef.current !== 'cancelled') {
-          setTransferState(prev => ({ ...prev, status: 'error', error: 'Connection failed' }));
+        if (!transferFinalizedRef.current && !transferCompletedRef.current) {
+          const message = 'Connection lost before transfer completed. Please retry.';
+          finalizeTransfer('error', message, message);
         } else {
-          console.log('✅ Connection closed after successful/cancelled transfer');
+          console.log('Connection closed after terminal transfer state.');
         }
       }
     };
 
     webrtcService.onDataChannelOpen = () => {
       console.log('Data channel opened');
-      setTransferState(prev => ({ ...prev, status: 'transferring' }));
+      markTransferStarted();
     };
 
     webrtcService.onIncomingFiles = (fileList) => {
+      if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
+        return;
+      }
+
       console.log('Incoming files:', fileList);
-      
-      setTransferState(prev => ({
-        ...prev,
-        files: fileList, // Keep as FileMetadata[]
-        status: 'transferring'
-      }));
+
+      setTransferState((prev) => {
+        if (isTerminalStatus(prev.status)) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          files: fileList,
+          status: 'transferring',
+          error: undefined,
+        };
+      });
+      markTransferStarted();
     };
 
     webrtcService.onTransferProgress = (progress) => {
-      setTransferState(prev => ({
-        ...prev,
-        progress: prev.progress.map(p => 
-          p.fileIndex === progress.fileIndex ? {
-            fileIndex: progress.fileIndex,
-            fileName: progress.fileName,
-            progress: progress.progress,
-            speed: progress.speed,
-            bytesTransferred: progress.bytesTransferred,
-            totalBytes: progress.totalBytes,
-            stage: progress.stage,
-            conversionProgress: progress.conversionProgress,
-          } : p
-        ).concat(
-          prev.progress.find(p => p.fileIndex === progress.fileIndex) ? [] : [{
-            fileIndex: progress.fileIndex,
-            fileName: progress.fileName,
-            progress: progress.progress,
-            speed: progress.speed,
-            bytesTransferred: progress.bytesTransferred,
-            totalBytes: progress.totalBytes,
-            stage: progress.stage,
-            conversionProgress: progress.conversionProgress,
-          }]
-        )
-      }));
+      if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
+        return;
+      }
+
+      setTransferState((prev) => {
+        if (isTerminalStatus(prev.status)) {
+          return prev;
+        }
+
+        const nextProgressEntry = {
+          fileIndex: progress.fileIndex,
+          fileName: progress.fileName,
+          progress: progress.progress,
+          speed: progress.speed,
+          bytesTransferred: progress.bytesTransferred,
+          totalBytes: progress.totalBytes,
+          stage: progress.stage,
+          conversionProgress: progress.conversionProgress,
+        };
+
+        const existingIndex = prev.progress.findIndex((p) => p.fileIndex === progress.fileIndex);
+        const nextProgress = existingIndex === -1
+          ? [...prev.progress, nextProgressEntry]
+          : prev.progress.map((p, index) => index === existingIndex ? nextProgressEntry : p);
+
+        return {
+          ...prev,
+          status: 'transferring',
+          error: undefined,
+          progress: nextProgress,
+        };
+      });
+
+      if (!transferStartedToastShownRef.current) {
+        transferStartedToastShownRef.current = true;
+        notifyOnce('transfer-started', 'info', 'Transfer started');
+      }
     };
 
     webrtcService.onFileReceived = (file) => {
+      if (transferFinalizedRef.current && transferStatusRef.current !== 'completed') {
+        return;
+      }
+
       console.log('onFileReceived called with file:', file.name, file.size, 'bytes');
-      setReceivedFiles(prev => [...prev, file]);
-      
-      // Auto-download the file immediately
+      setReceivedFiles((prev) => [...prev, file]);
+
+      // Auto-download on receiver side. Avoid noisy success toasts for each file.
       try {
         downloadFile(file);
-        toast.success(`File received and downloaded: ${file.name}`, {
-          description: `${file.name} has been automatically saved to your downloads folder`,
-          duration: 5000,
-        });
       } catch (error) {
         console.error('Error auto-downloading file:', error);
-        toast.error(`File received but download failed: ${file.name}`, {
-          description: 'You can manually download using the download button',
-          duration: 7000,
-        });
+        if (!autoDownloadFailureToastShownRef.current) {
+          autoDownloadFailureToastShownRef.current = true;
+          notifyOnce(
+            'auto-download-failed',
+            'warning',
+            'Automatic download was blocked by the browser.',
+            {
+              description: 'Use the download button next to each file.',
+              duration: 7000,
+            },
+          );
+        }
       }
     };
 
     webrtcService.onTransferComplete = () => {
-      if (transferStatusRef.current === 'completed') {
-        return;
-      }
-      setTransferCompleted(true);
-      setTransferState(prev => ({ ...prev, status: 'completed' }));
-      toast.success('Transfer completed successfully!');
+      finalizeTransfer('completed', 'Transfer completed successfully!');
     };
 
     webrtcService.onTransferCancelled = (cancelledBy) => {
-      if (transferStatusRef.current === 'completed' || transferStatusRef.current === 'cancelled') {
-        return;
-      }
-      toast.warning(`Transfer cancelled by ${cancelledBy}`);
-      setTransferState(prev => ({ 
-        ...prev, 
-        status: 'cancelled',
-        error: `Transfer cancelled by ${cancelledBy}`
-      }));
+      const message = `Transfer cancelled by ${cancelledBy}.`;
+      finalizeTransfer('cancelled', message, message);
     };
 
     webrtcService.onFileCancelled = (data) => {
-      toast.warning(`File "${data.fileName}" cancelled by ${data.cancelledBy}`);
-      // Mark the file as cancelled in progress instead of removing it
-      setTransferState(prev => ({
+      if (transferFinalizedRef.current) {
+        return;
+      }
+
+      notifyOnce(
+        `file-cancelled-${data.fileIndex}-${data.cancelledBy}`,
+        'warning',
+        `File "${data.fileName}" was cancelled by ${data.cancelledBy}.`,
+      );
+
+      // Mark the file as cancelled in progress instead of removing it.
+      setTransferState((prev) => ({
         ...prev,
         progress: [
-          ...prev.progress.filter(p => p.fileIndex !== data.fileIndex),
+          ...prev.progress.filter((p) => p.fileIndex !== data.fileIndex),
           {
             fileIndex: data.fileIndex,
             fileName: data.fileName,
@@ -367,35 +516,53 @@ export default function P2PFileTransfer() {
             cancelled: true,
             cancelledBy: data.cancelledBy,
             stage: 'transferring' as const,
-          }
-        ]
+          },
+        ],
       }));
     };
 
-    webrtcService.onError = (error) => {
-      if (transferStatusRef.current === 'cancelled' || transferStatusRef.current === 'completed') {
-        console.log('Ignoring post-terminal error:', error);
+    webrtcService.onError = (rawError) => {
+      if (transferFinalizedRef.current) {
+        console.log('Ignoring post-terminal error:', rawError);
         return;
       }
-      toast.error(error);
-      setTransferState(prev => ({ ...prev, status: 'error', error }));
+
+      const error = toUserFriendlyError(rawError);
+      console.error('WebRTC error:', rawError);
+      finalizeTransfer('error', error, error);
     };
-  }, [handleReset, transferCompleted]);
+
+    return () => {
+      webrtcService.onConnectionStateChange = undefined;
+      webrtcService.onDataChannelOpen = undefined;
+      webrtcService.onIncomingFiles = undefined;
+      webrtcService.onTransferProgress = undefined;
+      webrtcService.onFileReceived = undefined;
+      webrtcService.onTransferComplete = undefined;
+      webrtcService.onTransferCancelled = undefined;
+      webrtcService.onFileCancelled = undefined;
+      webrtcService.onError = undefined;
+    };
+  }, [finalizeTransfer, markTransferStarted, notifyOnce, updateTransferStatus]);
 
   // Connection timeout - auto-fail if stuck connecting for too long
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: NodeJS.Timeout | undefined;
     
-    if (transferState.status === 'connecting') {
+    if (transferState.status === 'connecting' && transferSessionActiveRef.current && !transferFinalizedRef.current) {
       // Set a 30-second timeout for connection attempts
       timeoutId = setTimeout(() => {
+        if (
+          transferStatusRef.current !== 'connecting' ||
+          transferFinalizedRef.current ||
+          !transferSessionActiveRef.current
+        ) {
+          return;
+        }
+
         console.log('Connection timeout reached');
-        toast.error('Connection timeout - the room code may be invalid or the sender is offline');
-        setTransferState(prev => ({ 
-          ...prev, 
-          status: 'error', 
-          error: 'Connection timeout. Please check the room code and try again.' 
-        }));
+        const message = 'Connection timed out. Check the room code and try again.';
+        finalizeTransfer('error', message, message);
       }, 30000); // 30 seconds
     }
     
@@ -404,10 +571,14 @@ export default function P2PFileTransfer() {
         clearTimeout(timeoutId);
       }
     };
-  }, [transferState.status]);
+  }, [finalizeTransfer, transferState.status]);
 
   const handleCancelFile = useCallback((fileIndex: number) => {
-    if (transferStatusRef.current !== 'transferring') {
+    if (
+      transferStatusRef.current !== 'transferring' ||
+      !transferSessionActiveRef.current ||
+      transferFinalizedRef.current
+    ) {
       return;
     }
 
@@ -426,10 +597,10 @@ export default function P2PFileTransfer() {
     webrtcService.cancelFile(fileIndex, file.name);
     
     // Mark the file as cancelled locally
-    setTransferState(prev => ({
+    setTransferState((prev) => ({
       ...prev,
       progress: [
-        ...prev.progress.filter(p => p.fileIndex !== fileIndex),
+        ...prev.progress.filter((p) => p.fileIndex !== fileIndex),
         {
           fileIndex,
           fileName: file.name,
@@ -444,8 +615,8 @@ export default function P2PFileTransfer() {
       ]
     }));
     
-    toast.info(`File "${file.name}" cancelled`);
-  }, [transferState.files, transferState.progress]);
+    notifyOnce(`file-local-cancel-${fileIndex}`, 'info', `File "${file.name}" cancelled.`);
+  }, [notifyOnce, transferState.files, transferState.progress]);
 
   const handleSendFiles = useCallback(async (files: File[]) => {
     console.log('handleSendFiles called in main component');
@@ -456,6 +627,9 @@ export default function P2PFileTransfer() {
       console.log('Not connected to signaling server');
       return;
     }
+
+    beginTransferSession();
+    setReceivedFiles([]);
 
     const code = generateRoomCode();
     console.log('Generated room code:', code);
@@ -477,6 +651,7 @@ export default function P2PFileTransfer() {
         fileIndex: index,
       })),
       progress: [],
+      error: undefined,
     });
 
     // Scroll to top when sharing starts
@@ -484,10 +659,22 @@ export default function P2PFileTransfer() {
 
     try {
       // Register listener before joining to avoid missing fast peer-joined events
+      let senderInitialized = false;
       signalingService.onPeerJoined(async (peerId) => {
+        if (senderInitialized || transferFinalizedRef.current) {
+          return;
+        }
+        senderInitialized = true;
+
         console.log('Peer joined:', peerId);
-        toast.success('Receiver connected! Starting transfer...');
-        await webrtcService.initializeAsSender(code, files);
+        notifyOnce('peer-connected', 'success', 'Receiver connected. Starting transfer...');
+        try {
+          await webrtcService.initializeAsSender(code, files);
+        } catch (error) {
+          console.error('Failed to initialize sender after peer join:', error);
+          const message = 'Failed to establish sender connection. Please retry.';
+          finalizeTransfer('error', message, message);
+        }
       });
 
       console.log('Joining room:', code);
@@ -495,15 +682,18 @@ export default function P2PFileTransfer() {
 
     } catch (error) {
       console.error('Failed to initialize sender:', error);
-      toast.error('Failed to start file sharing');
-      handleReset();
+      const message = 'Failed to start file sharing. Please try again.';
+      finalizeTransfer('error', message, message);
     }
-  }, [isConnected, handleReset]);
+  }, [beginTransferSession, finalizeTransfer, isConnected, notifyOnce]);
 
   const handleReceiveFiles = useCallback(async (code: string) => {
     if (!isConnected) {
       return;
     }
+
+    beginTransferSession();
+    setReceivedFiles([]);
 
     setRoomCode(code);
     setHasNavigatedToSharing(true);
@@ -519,18 +709,19 @@ export default function P2PFileTransfer() {
       status: 'connecting',
       files: [],
       progress: [],
+      error: undefined,
     });
 
     try {
       signalingService.joinRoom(code);
       await webrtcService.initializeAsReceiver(code);
-      toast.success('Connected to sender. Waiting for files...');
+      notifyOnce('receiver-joined', 'info', 'Joined room. Waiting for sender...');
     } catch (error) {
       console.error('Failed to initialize receiver:', error);
-      toast.error('Failed to join file sharing session');
-      handleReset();
+      const message = 'Failed to join the file sharing session. Check the room code and retry.';
+      finalizeTransfer('error', message, message);
     }
-  }, [isConnected, handleReset]);
+  }, [beginTransferSession, finalizeTransfer, isConnected, notifyOnce]);
 
   const handleCancelTransfer = useCallback(() => {
     webrtcService.cancelTransfer();
@@ -811,3 +1002,4 @@ export default function P2PFileTransfer() {
     </div>
   );
 }
+
