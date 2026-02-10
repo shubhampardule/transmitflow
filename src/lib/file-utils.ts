@@ -15,12 +15,42 @@ export const formatFileSize = (bytes: number): string => {
   return `${size} ${sizes[i]}`;
 };
 
-export const generateRoomCode = (): string => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+const ROOM_CODE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const ROOM_CODE_LENGTH = 8;
+const MAX_UNBIASED_BYTE_FOR_ROOM_CODE =
+  Math.floor(256 / ROOM_CODE_CHARSET.length) * ROOM_CODE_CHARSET.length;
+
+const getSecureRandomBytes = (length: number): Uint8Array => {
+  const cryptoApi = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+  if (!cryptoApi?.getRandomValues) {
+    throw new Error('Secure random generator is unavailable in this environment');
   }
+
+  const bytes = new Uint8Array(length);
+  cryptoApi.getRandomValues(bytes);
+  return bytes;
+};
+
+export const generateRoomCode = (): string => {
+  let result = '';
+
+  // Use rejection sampling to avoid modulo bias in generated characters.
+  while (result.length < ROOM_CODE_LENGTH) {
+    const remainingChars = ROOM_CODE_LENGTH - result.length;
+    const randomBytes = getSecureRandomBytes(remainingChars * 2);
+
+    for (const byte of randomBytes) {
+      if (byte >= MAX_UNBIASED_BYTE_FOR_ROOM_CODE) {
+        continue;
+      }
+
+      result += ROOM_CODE_CHARSET.charAt(byte % ROOM_CODE_CHARSET.length);
+      if (result.length === ROOM_CODE_LENGTH) {
+        break;
+      }
+    }
+  }
+
   return result;
 };
 

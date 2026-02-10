@@ -224,6 +224,7 @@ export class WebRTCService {
   private pendingIceCandidates: RTCIceCandidateInit[] = [];
   private hasRemoteDescription = false;
   private transferSessionId = '';
+  private transferSessionCounter = 0;
   private readonly chunkStore = new IndexedDbChunkStore();
   private pendingChunkWrites = new Map<number, Promise<void>>();
   private pendingChunkResends = new Map<number, Promise<void>>();
@@ -527,8 +528,41 @@ export class WebRTCService {
     return this.filesToSend.reduce((total, file) => total + file.size, 0);
   }
 
+  private createSecureSuffix(length: number): string {
+    const charset = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    const maxUnbiasedByte = Math.floor(256 / charset.length) * charset.length;
+    let token = '';
+    const cryptoApi = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+
+    if (cryptoApi?.getRandomValues) {
+      while (token.length < length) {
+        const remainingChars = length - token.length;
+        const randomBytes = new Uint8Array(remainingChars * 2);
+        cryptoApi.getRandomValues(randomBytes);
+
+        for (const byte of randomBytes) {
+          if (byte >= maxUnbiasedByte) {
+            continue;
+          }
+
+          token += charset.charAt(byte % charset.length);
+          if (token.length === length) {
+            break;
+          }
+        }
+      }
+
+      return token;
+    }
+
+    // Fallback keeps IDs unique without relying on non-cryptographic randomness.
+    this.transferSessionCounter += 1;
+    const fallbackToken = `${Date.now().toString(36)}${this.transferSessionCounter.toString(36)}`;
+    return fallbackToken.slice(-length).padStart(length, '0');
+  }
+
   private createTransferSessionId(role: 'sender' | 'receiver', roomCode: string): string {
-    const suffix = Math.random().toString(36).slice(2, 10);
+    const suffix = this.createSecureSuffix(8);
     return `${roomCode}-${role}-${Date.now()}-${suffix}`;
   }
 
