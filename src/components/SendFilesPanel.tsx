@@ -19,37 +19,17 @@ interface SendFilesPanelProps {
 
 export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: SendFilesPanelProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  // Start with empty QR code
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  console.log('SendFilesPanel rendering, roomCode:', roomCode, 'qrCodeUrl:', qrCodeUrl ? 'HAS_VALUE' : 'EMPTY');
-
-  // Test QR code generation immediately
-  useEffect(() => {
-    // Always generate a test QR code to verify rendering works
-    const generateTestQR = async () => {
-      try {
-        console.log('Generating test QR code...');
-        const testQrUrl = await QRCode.toDataURL('https://example.com');
-        console.log('Test QR generated, length:', testQrUrl.length);
-        setQrCodeUrl(testQrUrl);
-      } catch (error) {
-        console.error('Test QR generation failed:', error);
-      }
-    };
-    generateTestQR();
-  }, []);
-
   // Generate QR code when room code changes
   useEffect(() => {
-    console.log('=== QR EFFECT RUNNING ===', 'roomCode:', roomCode);
+    let cancelled = false;
+
     if (roomCode) {
-      console.log('Room code exists, generating QR...');
       const generateQR = async () => {
         try {
           const shareUrl = `${window.location.origin}?receive=${roomCode}`;
-          console.log('Generating QR for URL:', shareUrl);
           const qrDataUrl = await QRCode.toDataURL(shareUrl, {
             width: 256,
             margin: 2,
@@ -58,18 +38,21 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
               light: '#FFFFFF'
             }
           });
-          console.log('QR generated successfully! Length:', qrDataUrl.length);
-          setQrCodeUrl(qrDataUrl);
-          console.log('QR code state updated');
+          if (!cancelled) {
+            setQrCodeUrl(qrDataUrl);
+          }
         } catch (error) {
           console.error('QR generation failed:', error);
         }
       };
       generateQR();
     } else {
-      console.log('No room code, clearing QR');
       setQrCodeUrl('');
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [roomCode]);
 
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,20 +98,14 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
   }, [roomCode]);
 
   const handleSendFiles = useCallback(() => {
-    console.log('handleSendFiles called with:', selectedFiles.length, 'files');
-    console.log('disabled:', disabled);
     if (selectedFiles.length > 0) {
-      console.log('Calling onSendFiles with files:', selectedFiles);
       onSendFiles(selectedFiles);
-    } else {
-      console.log('No files selected');
     }
-  }, [selectedFiles, onSendFiles, disabled]);
+  }, [selectedFiles, onSendFiles]);
 
   const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
 
   if (roomCode) {
-    console.log('Rendering room code section - roomCode:', roomCode, 'qrCodeUrl:', qrCodeUrl || 'EMPTY');
     return (
       <div className="space-y-6">
         <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/50">
