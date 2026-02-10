@@ -7,6 +7,44 @@ const crypto = require('crypto');
 const app = express();
 const server = http.createServer(app);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const LOG_LEVEL = (
+  process.env.SIGNALING_LOG_LEVEL ||
+  (IS_PRODUCTION ? 'info' : 'debug')
+).toLowerCase();
+const LOG_LEVEL_PRIORITY = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+  silent: 100,
+};
+const ACTIVE_LOG_LEVEL =
+  Object.prototype.hasOwnProperty.call(LOG_LEVEL_PRIORITY, LOG_LEVEL)
+    ? LOG_LEVEL
+    : (IS_PRODUCTION ? 'info' : 'debug');
+
+function shouldLog(level) {
+  return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[ACTIVE_LOG_LEVEL];
+}
+
+function logDebug(...args) {
+  if (shouldLog('debug')) {
+    console.log(...args);
+  }
+}
+
+function logInfo(...args) {
+  if (shouldLog('info')) {
+    console.log(...args);
+  }
+}
+
+function logWarn(...args) {
+  if (shouldLog('warn')) {
+    console.warn(...args);
+  }
+}
+
 const SERVER_VERSION = '4.0.0';
 const HEALTH_DIAGNOSTICS_TOKEN =
   process.env.SIGNALING_HEALTH_DIAGNOSTICS_TOKEN ||
@@ -150,19 +188,19 @@ const hasCustomTurnConfigured = (
 );
 
 if (configuredTurnUrls.length > 0 && !hasCustomTurnConfigured) {
-  console.warn(
+  logWarn(
     '[SECURITY] TURN URLs were provided without full credentials. TURN relay configuration will be skipped.',
   );
 }
 
 if (IS_PRODUCTION && !hasCustomTurnConfigured) {
-  console.warn(
+  logWarn(
     '[SECURITY] Production is running without a custom TURN relay credential set. Some restrictive networks may fail to connect.',
   );
 }
 
 if (IS_PRODUCTION && ALLOW_INSECURE_PUBLIC_TURN_FALLBACK) {
-  console.warn(
+  logWarn(
     '[SECURITY] ALLOW_INSECURE_PUBLIC_TURN_FALLBACK is enabled in production. Disable this unless strictly needed.',
   );
 }
@@ -328,7 +366,11 @@ function isAllowedCorsOrigin(origin) {
 function corsOriginCallback(origin, callback) {
   const allowed = isAllowedCorsOrigin(origin);
   if (!allowed) {
-    console.warn(`[SECURITY] Blocked CORS origin: ${origin || 'unknown'}`);
+    if (IS_PRODUCTION) {
+      logWarn('[SECURITY] Blocked non-allowlisted CORS origin request');
+    } else {
+      logWarn(`[SECURITY] Blocked CORS origin: ${origin || 'unknown'}`);
+    }
   }
   callback(null, allowed);
 }
@@ -411,7 +453,11 @@ function toNonNegativeInteger(rawValue) {
 }
 
 function rejectInvalidPayload(socket, eventName, reason) {
-  console.warn(`[SECURITY] Rejecting ${eventName} from ${socket.id}: ${reason}`);
+  if (IS_PRODUCTION) {
+    logWarn(`[SECURITY] Rejecting invalid ${eventName} payload`);
+  } else {
+    logWarn(`[SECURITY] Rejecting ${eventName} from ${socket.id}: ${reason}`);
+  }
   socket.emit('request-invalid', {
     event: eventName,
     message: 'Invalid request payload',
@@ -455,7 +501,11 @@ function consumeWindowCounter(counterStore, key, windowMs, limit, cost = 1) {
 }
 
 function emitRateLimit(socket, eventName, reason, retryAfterMs, scope) {
-  console.warn(`[SECURITY] Rate limit (${scope}) on ${eventName} for ${socket.id}: ${reason}`);
+  if (IS_PRODUCTION) {
+    logWarn(`[SECURITY] Rate limit hit for ${eventName} (${scope})`);
+  } else {
+    logWarn(`[SECURITY] Rate limit (${scope}) on ${eventName} for ${socket.id}: ${reason}`);
+  }
   socket.emit('rate-limited', {
     event: eventName,
     message: 'Too many requests. Please slow down.',
@@ -991,7 +1041,11 @@ function createRoom(roomId) {
       const timeSinceActivity = Date.now() - room.lastActivity;
       
       if (timeSinceActivity >= ROOM_TIMEOUT) {
-        console.log(`Room ${roomId} expired after ${ROOM_TIMEOUT/1000/60} minutes`);
+        if (IS_PRODUCTION) {
+          logInfo(`Expiring inactive room after ${ROOM_TIMEOUT / 1000 / 60} minutes`);
+        } else {
+          logDebug(`Room ${roomId} expired after ${ROOM_TIMEOUT/1000/60} minutes`);
+        }
         room.participants.forEach(socketId => {
           const socket = io.sockets.sockets.get(socketId);
           if (socket) {
@@ -1059,7 +1113,11 @@ io.on('connection', (socket) => {
   const userAgent = socket.handshake.headers['user-agent'] || '';
   const country = socket.handshake.headers['cf-ipcountry'] || 'unknown';
 
-  console.log(`Client connected: ${socket.id} from ${clientIP} (${country})`);
+  if (IS_PRODUCTION) {
+    logInfo('Client connected');
+  } else {
+    logDebug(`Client connected: ${socket.id} from ${clientIP} (${country})`);
+  }
 
   connectionStats.set(socket.id, {
     connectedAt: Date.now(),
@@ -1088,7 +1146,9 @@ io.on('connection', (socket) => {
     }
 
     let room = rooms.get(roomId);
-    console.log(`${socket.id} (${requestedRole || 'auto'}) joining room: ${roomId} from ${country}`);
+    if (!IS_PRODUCTION) {
+      logDebug(`${socket.id} (${requestedRole || 'auto'}) joining room: ${roomId} from ${country}`);
+    }
 
     // Reject joins while an active transfer is in progress in this room
     if (room && room.transferInProgress) {
@@ -1149,7 +1209,11 @@ io.on('connection', (socket) => {
         room.isLongDistance = distance > 100;
 
         if (room.isLongDistance) {
-          console.log(`Long-distance room detected: ${roomId} (estimated ${distance}km)`);
+          if (IS_PRODUCTION) {
+            logInfo('Long-distance route detected for active room');
+          } else {
+            logDebug(`Long-distance room detected: ${roomId} (estimated ${distance}km)`);
+          }
           // Optimize settings for long distance
           room.adaptiveSettings = {
             chunkSize: 1024,
@@ -1210,14 +1274,20 @@ io.on('connection', (socket) => {
     if (!authorized) return;
 
     const { room } = authorized;
-    console.log(`Offer from ${socket.id} to room ${payload.roomId}`);
+    if (!IS_PRODUCTION) {
+      logDebug(`Offer from ${socket.id} to room ${payload.roomId}`);
+    }
 
     room.connectionAttempts++;
     room.lastActivity = Date.now();
 
     if (payload.iceRestart) {
       room.iceRestartCount++;
-      console.log(`ICE restart #${room.iceRestartCount} for room ${payload.roomId}`);
+      if (IS_PRODUCTION) {
+        logInfo(`ICE restart triggered for active transfer (attempt ${room.iceRestartCount})`);
+      } else {
+        logDebug(`ICE restart #${room.iceRestartCount} for room ${payload.roomId}`);
+      }
 
       // Switch to next TURN server
       room.turnServerIndex = (room.turnServerIndex + 1) % turnServers.length;
@@ -1260,7 +1330,9 @@ io.on('connection', (socket) => {
     if (!authorized) return;
 
     const { room } = authorized;
-    console.log(`Answer from ${socket.id} to room ${payload.roomId}`);
+    if (!IS_PRODUCTION) {
+      logDebug(`Answer from ${socket.id} to room ${payload.roomId}`);
+    }
 
     room.lastActivity = Date.now();
 
@@ -1313,7 +1385,9 @@ io.on('connection', (socket) => {
         connectionIssues.get(payload.roomId).relayCount++;
       }
 
-      console.log(`ICE candidate from ${socket.id}: ${candidateType} (room: ${payload.roomId})`);
+      if (!IS_PRODUCTION) {
+        logDebug(`ICE candidate from ${socket.id}: ${candidateType} (room: ${payload.roomId})`);
+      }
     }
 
     socket.to(payload.roomId).emit('webrtc-ice-candidate', {
@@ -1341,7 +1415,9 @@ io.on('connection', (socket) => {
     participant.connectionState = payload.state;
     participant.lastSeen = Date.now();
 
-    console.log(`${socket.id} connection state: ${payload.state} (long-distance: ${room.isLongDistance})`);
+    if (!IS_PRODUCTION) {
+      logDebug(`${socket.id} connection state: ${payload.state} (long-distance: ${room.isLongDistance})`);
+    }
 
     if (payload.state === 'connected') {
       const stats = connectionStats.get(socket.id);
@@ -1411,7 +1487,11 @@ io.on('connection', (socket) => {
     room.lastActivity = Date.now();
     room.transferStartTime = Date.now();
 
-    console.log(`Transfer started in room ${payload.roomId} (long-distance: ${room.isLongDistance})`);
+    if (IS_PRODUCTION) {
+      logInfo('Transfer session started');
+    } else {
+      logDebug(`Transfer started in room ${payload.roomId} (long-distance: ${room.isLongDistance})`);
+    }
 
     socket.to(payload.roomId).emit('transfer-started', {
       isLongDistance: room.isLongDistance,
@@ -1447,7 +1527,9 @@ io.on('connection', (socket) => {
         room.adaptiveSettings.delay = Math.min(500, room.adaptiveSettings.delay + 50);
 
         io.to(payload.roomId).emit('adaptive-settings-update', room.adaptiveSettings);
-        console.log(`Adapted settings for slow transfer: ${speedKBps.toFixed(1)} KB/s`);
+        if (!IS_PRODUCTION) {
+          logDebug(`Adapted settings for slow transfer: ${speedKBps.toFixed(1)} KB/s`);
+        }
       }
     }
 
@@ -1476,7 +1558,13 @@ io.on('connection', (socket) => {
     const fileSize = payload.totalBytes || 0;
     const avgSpeed = duration > 0 ? fileSize / duration : 0;
 
-    console.log(`Transfer completed in ${payload.roomId}: ${duration.toFixed(1)}s, ${(fileSize/1024/1024).toFixed(2)}MB, ${(avgSpeed/1024).toFixed(1)}KB/s (long-distance: ${room.isLongDistance})`);
+    if (IS_PRODUCTION) {
+      logInfo(
+        `Transfer session completed (duration=${duration.toFixed(1)}s, avgKBps=${(avgSpeed / 1024).toFixed(1)})`,
+      );
+    } else {
+      logDebug(`Transfer completed in ${payload.roomId}: ${duration.toFixed(1)}s, ${(fileSize/1024/1024).toFixed(2)}MB, ${(avgSpeed/1024).toFixed(1)}KB/s (long-distance: ${room.isLongDistance})`);
+    }
 
     room.transferInProgress = false;
     room.lastActivity = Date.now();
@@ -1520,7 +1608,11 @@ io.on('connection', (socket) => {
     room.transferInProgress = false;
     room.lastActivity = Date.now();
 
-    console.log(`Transfer cancelled in room ${payload.roomId} by ${cancelledBy}${reason ? ` (${reason})` : ''}`);
+    if (IS_PRODUCTION) {
+      logInfo(`Transfer session cancelled by ${cancelledBy}`);
+    } else {
+      logDebug(`Transfer cancelled in room ${payload.roomId} by ${cancelledBy}${reason ? ` (${reason})` : ''}`);
+    }
 
     socket.to(payload.roomId).emit('transfer-cancelled', {
       from: socket.id,
@@ -1609,7 +1701,11 @@ io.on('connection', (socket) => {
     const stats = connectionStats.get(socket.id);
     const duration = stats ? (Date.now() - stats.connectedAt) / 1000 : 0;
 
-    console.log(`Client disconnected: ${socket.id} after ${duration.toFixed(1)}s`);
+    if (IS_PRODUCTION) {
+      logInfo('Client disconnected');
+    } else {
+      logDebug(`Client disconnected: ${socket.id} after ${duration.toFixed(1)}s`);
+    }
     connectionStats.delete(socket.id);
     clearSocketAbuseCounters(socket.id);
 
@@ -1655,19 +1751,19 @@ setInterval(() => {
   const activeTransfers = Array.from(rooms.values()).filter(r => r.transferInProgress).length;
   
   if (totalRooms > 0) {
-    console.log(`[ENHANCED STATS] Total: ${totalRooms}, Long-distance: ${longDistanceRooms}, Active transfers: ${activeTransfers}, Connections: ${io.sockets.sockets.size}`);
+    logDebug(`[ENHANCED STATS] Total: ${totalRooms}, Long-distance: ${longDistanceRooms}, Active transfers: ${activeTransfers}, Connections: ${io.sockets.sockets.size}`);
   }
 }, 120000); // Every 2 minutes
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`🚀 Enhanced Sendify Signaling Server running on port ${PORT}`);
-  console.log(`📡 Optimized for long-distance WebRTC connections`);
-  console.log(
+  logInfo(`Enhanced Sendify Signaling Server running on port ${PORT}`);
+  logInfo('Optimized for long-distance WebRTC connections');
+  logInfo(
     `🌍 ICE config: ${turnServers.length} server entries (${hasCustomTurnConfigured ? 'custom TURN enabled' : 'STUN-only fallback'})`,
   );
   if (IS_PRODUCTION && !hasCustomTurnConfigured) {
-    console.log('⚠️  Configure TURN_URLS, TURN_USERNAME, and TURN_CREDENTIAL for reliable production relay connectivity.');
+    logWarn('Configure TURN_URLS, TURN_USERNAME, and TURN_CREDENTIAL for reliable production relay connectivity.');
   }
-  console.log(`⚡ Features: Multi-TURN failover, adaptive settings, connection recovery`);
+  logInfo('Features: Multi-TURN failover, adaptive settings, connection recovery');
 });
