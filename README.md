@@ -3,15 +3,15 @@
 <div align="center">
 
 ![TransmitFlow](https://img.shields.io/badge/TransmitFlow-Seamless%20Transmission-blue?style=for-the-badge)
-![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)
-![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react)
+![Next.js](https://img.shields.io/badge/Next.js-15.5.12-black?style=for-the-badge&logo=next.js)
+![React](https://img.shields.io/badge/React-19.1.0-61DAFB?style=for-the-badge&logo=react)
 ![WebRTC](https://img.shields.io/badge/WebRTC-Enabled-green?style=for-the-badge)
-![TypeScript](https://img.shields.io/badge/TypeScript-Ready-3178C6?style=for-the-badge&logo=typescript)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript)
 
 **Send files instantly between devices without any servers storing your data - Seamless file transfer made simple.**
 > **⚠️ Note:** Large file transfers (e.g., 1GB+) may use significant memory on your device. On mobile or low-RAM devices, very large transfers can cause performance issues or browser crashes. For best results, use chunked transfers and avoid sending extremely large files on mobile.
 
-> **🔄 Updated: September 30, 2025 - Latest version with enhanced UI and performance optimizations**
+> **🔄 Updated: February 10, 2026 - Major reliability, security hardening, QR, and PWA upgrades**
 
 [🚀 Live Demo](https://transmitflow.vercel.app) • [📖 Documentation](https://github.com/shubhampardule/transmitflow/wiki) • [🐛 Report Bug](https://github.com/shubhampardule/transmitflow/issues) • [✨ Request Feature](https://github.com/shubhampardule/transmitflow/issues)
 
@@ -19,6 +19,45 @@
 </div>
 
 ---
+
+## 🆕 2026 Release Highlights
+
+### ✅ Reliability and Transfer Accuracy
+- Binary-first transfer path with automatic compatibility fallback.
+- Missing-chunk recovery and retransmission flow for incomplete transfers.
+- Strict sender/receiver state handling to avoid conflicting final statuses.
+- Final acknowledgment handshake so "completed" is shown only after confirmation.
+- SHA-256 integrity verification during receive finalization.
+- IndexedDB chunk storage support to reduce RAM pressure on large transfers.
+
+### ✅ UX and Flow Improvements
+- Improved cancel behavior for full transfer and individual files.
+- Cleaner production-friendly status/error messages on both peers.
+- Better reset and back-navigation behavior during active sessions.
+- Refined loading/startup and transfer progress behavior.
+
+### ✅ QR and Connection Improvements
+- QR generation stabilized in sender flow.
+- Receiver scanner parsing hardened for direct code, URL param, and fallback extraction.
+- Scanner tuned for reliability across devices (`qr_code`, single-scan, rear camera).
+
+### ✅ PWA and Offline Support
+- Offline shell page and reconnect guidance.
+- Service worker lifecycle improvements.
+- Cache hardening so invite query params are not persisted in cache keys.
+- Install prompt support for app-like mobile experience.
+
+### ✅ Security Hardening (10/10 Completed)
+- Event authorization + payload validation
+- Abuse protection + rate limits
+- Tight CORS allowlist
+- Dependency patching + lockfile alignment
+- Security headers + CSP
+- Health endpoint exposure reduction
+- TURN credential model hardening
+- CSPRNG room code generation
+- Production log sanitization
+- Service worker cache hardening
 
 ## 🎯 Why TransmitFlow?
 
@@ -53,7 +92,7 @@
 <td width="50%">
 
 ### 🛠️ **Developer Friendly**
-- **Modern Tech Stack** - Next.js 15, React 19, TypeScript
+- **Modern Tech Stack** - Next.js 15.5.12, React 19.1.0, TypeScript 5+
 - **Clean Architecture** - Well-documented, maintainable code
 - **Open Source** - CC BY-NC 4.0 licensed, community-driven
 
@@ -84,7 +123,7 @@
 <td colspan="2" align="center">
 <img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Transfering.png" alt="TransmitFlow - Transfer Progress" width="70%"/>
 <br/>
-<em>� Real-time Transfer Progress with File Management</em>
+<em>📊 Real-time Transfer Progress with File Management</em>
 </td>
 </tr>
 </table>
@@ -106,34 +145,42 @@
 - 📋 **One-Click Sharing**: Share connection links via clipboard or QR scan
 - 🔗 **Smart URLs**: Direct links for easy sharing across messaging apps
 
-### 🌟 **Current Version Highlights (v0.1.0)**
+### 🌟 **Current Version Highlights (2026 Stable)**
 
-**✅ Enhanced User Experience**
-- 🚀 **Next.js 15.4.6 + React 19**: Latest performance optimizations
-- 🎨 **shadcn/ui Components**: Modern, accessible design system
-- 📱 **Advanced QR Scanning**: `@yudiel/react-qr-scanner` for reliable scanning
-- ⚡ **Turbopack Integration**: Lightning-fast development builds
-- 📊 **Analytics Integration**: Vercel Analytics & Speed Insights
+**✅ Platform and UX**
+- 🚀 **Next.js 15.5.12 + React 19.1.0**: Updated framework stack
+- 🎨 **shadcn/ui + Tailwind**: Modern, responsive, accessible UI
+- 📱 **Reliable QR Flow**: Stronger generation + scanner parsing logic
+- ⚡ **Turbopack Dev Flow**: Faster development feedback cycle
+- 📊 **Vercel Speed Insights**: Production performance visibility
 
-**✅ Technical Improvements**
-- 🔄 **Enhanced WebRTC**: Multi-TURN server failover support
-- 🌐 **Production-Ready Signaling**: Hosted signaling server with global reach
-- 🛡️ **TypeScript 5+**: Advanced type safety and developer experience
-- 📱 **Mobile Optimization**: Touch-friendly interface with responsive design
-- 🔧 **Environment Configuration**: Flexible TURN/STUN server setup
+**✅ Transfer Engine Improvements**
+- 🔄 **Binary-First Data Path**: Faster default transfer path
+- 🔁 **Compatibility Fallback**: Base64 fallback when binary path is not stable
+- 🧩 **Missing-Chunk Recovery**: Request/retry flow for incomplete receives
+- ✅ **Final ACK State Convergence**: Sender/receiver completion is synchronized
+- 🔐 **SHA-256 Integrity Checks**: File-level verification during finalize
+- 💾 **IndexedDB Chunk Store**: Reduced memory pressure on larger receives
 
 ### 🛡️ **Security & Privacy**
-- 🔒 **End-to-End Transfer**: Direct peer-to-peer connection with no middleman
-- 🚫 **No Data Storage**: Files are never stored on servers - ever
-- 🔐 **Secure Signaling**: Encrypted WebRTC signaling server for safe connections
-- 🏠 **Room-based Sessions**: Temporary, secure transfer rooms that auto-expire
+- 🔒 **Direct WebRTC Transfer**: End-to-end peer transfer path
+- 🚫 **No File Payload Storage on Signaling Server**
+- 🔐 **Strict Signaling Validation + Authorization**
+- 🧱 **Rate Limiting and Abuse Protection**
+- 🌐 **Tight Production CORS Allowlist**
+- 📋 **Security Headers + CSP Baseline**
+- 🏥 **Safe Public Health + Protected Diagnostics Endpoint**
+- 🎲 **CSPRNG Room Codes**
+- 🧹 **Production Log Sanitization**
+- 🗂️ **Service Worker Cache Hardening for Invite URLs**
 
 ### 🎯 **Smart Features**
-- 🔍 **Auto-Discovery**: Automatic device detection and connection establishment
-- ⏸️ **Transfer Management**: Cancel individual files or entire transfers mid-stream
-- 🔄 **Connection Recovery**: Automatic reconnection on network issues
-- ⬅️ **Smart Navigation**: Intelligent browser back button handling
-- 📱 **Responsive Design**: Perfect experience on any device size
+- 🔍 **Auto-Discovery + Dynamic ICE Updates**
+- ⏸️ **Cancel Individual File or Entire Transfer**
+- 🔄 **Improved Reconnect and State Recovery**
+- ⬅️ **Back-Navigation Safe Reset Behavior**
+- 📱 **PWA Install + Offline Shell Experience**
+- 📢 **Cleaner User Messages for Success/Cancel/Error**
 
 ### 💻 **Universal Compatibility**
 - 🖥️ **All Platforms**: Windows, macOS, Linux, iOS, Android - everywhere
@@ -161,8 +208,8 @@ cd transmitflow
 npm install
 
 # 3️⃣ Set up environment variables
-# Copy .env.example to .env and configure your signaling server
-cp .env.example .env
+# Create .env manually (see Environment Variables section below)
+# and configure signaling/TURN values as needed.
 
 # 4️⃣ Start development server with Turbopack (faster builds)
 npm run dev
@@ -170,7 +217,7 @@ npm run dev
 # 🎉 Open http://localhost:3000 and start sharing!
 ```
 
-> **Note**: The signaling server is already hosted for you. The app will work immediately for development and production.
+> **Note**: If you run your own signaling server, deploy and configure it separately. If your signaling server lives in another repo, keep its version aligned with this frontend.
 
 ### 🏗️ Production Deployment
 
@@ -437,12 +484,12 @@ graph TD
 
 | Layer | Technology | Purpose |
 |:------|:-----------|:--------|
-| 🎨 **Frontend** | Next.js 15.4.6 + React 19 | Latest web framework with React 19 concurrent features |
+| 🎨 **Frontend** | Next.js 15.5.12 + React 19.1.0 | Latest web framework with React 19 concurrent features |
 | 📱 **UI/UX** | Tailwind CSS + shadcn/ui | Modern design system with accessible components |
 | 🔗 **P2P Engine** | WebRTC Data Channels | Direct peer-to-peer file transfer |
 | 🌐 **Signaling** | Socket.IO 4.8.1 + Express 5.1.0 | Real-time connection coordination |
 | 🛡️ **Type Safety** | TypeScript 5+ | Rock-solid code with compile-time checks |
-| 🎯 **State Management** | React 19 Hooks | Efficient state handling with latest React features |
+| 🎯 **State Management** | React 19 Hooks + transfer state machine | Efficient state handling and consistent sender/receiver status |
 | 📊 **Analytics** | Vercel Analytics & Speed Insights | Performance monitoring and user analytics |
 | 🔍 **QR Scanning** | @yudiel/react-qr-scanner | Modern QR code scanning capabilities |
 
@@ -457,6 +504,7 @@ p2p-react/
 │   ├── 📱 app/                    # Next.js 15 App Router
 │   │   ├── layout.tsx             # Root layout with providers
 │   │   ├── page.tsx               # Main application page
+│   │   ├── offline/page.tsx       # Offline fallback page
 │   │   ├── globals.css            # Global styles & Tailwind
 │   │   └── *.ico, *.svg          # App icons and assets
 │   │
@@ -471,6 +519,8 @@ p2p-react/
 │   │   │   ├── DelayedLoader.tsx  # Loading states
 │   │   │   ├── LoadingSpinner.tsx # Spinner component
 │   │   │   ├── ThemeToggle.tsx    # Theme switching
+│   │   │   ├── PwaManager.tsx     # PWA install + online/offline banners
+│   │   │   ├── ProductionLogGuard.tsx # Production client log guard
 │   │   │   ├── TransmitFlowLogo.tsx # Main logo
 │   │   │   └── TransmitFlowLogoOnly.tsx # Icon-only logo
 │   │   │
@@ -483,6 +533,7 @@ p2p-react/
 │   ├── 🔧 lib/                    # Core business logic
 │   │   ├── webrtc.ts              # 🌐 WebRTC P2P engine with connection optimization
 │   │   ├── signaling.ts           # 📡 Socket.IO client with enhanced error handling
+│   │   ├── chunk-store.ts         # 💾 IndexedDB chunk persistence
 │   │   ├── file-utils.ts          # 📁 File handling, chunking & validation
 │   │   └── utils.ts               # 🛠️ Helper functions & utilities
 │   │
@@ -490,14 +541,16 @@ p2p-react/
 │       └── index.ts               # Global type definitions & interfaces
 │
 ├── 🌍 public/                     # Static assets
+│   ├── sw.js                      # Service worker (PWA/offline cache logic)
+│   ├── manifest.webmanifest       # PWA manifest
 │   ├── *.svg                      # App icons (favicon, logos, etc.)
 │   └── *.ico                      # Favicons
 │
-├── � signaling-server.js          # Production signaling server with multi-TURN support
-├── � package.json                # Dependencies and scripts
+├── 📡 signaling-server.js          # Production signaling server with multi-TURN support
+├── 📦 package.json                # Dependencies and scripts
 ├── 🏗️ next.config.js              # Next.js configuration with image optimization
 ├── 🎨 tailwind.config.js          # Tailwind CSS configuration
-├── � components.json             # shadcn/ui configuration
+├── ⚙️ components.json             # shadcn/ui configuration
 ├── 🚀 vercel.json                 # Vercel deployment configuration
 ├── ⚙️ Procfile                    # Server deployment configuration
 └── 🌐 .env                        # Environment variables (signaling server, TURN/STUN)
@@ -513,10 +566,12 @@ p2p-react/
 
 #### **🌐 WebRTC Service** (`webrtc.ts`)
 - 🔗 Manages peer-to-peer connections
-- 📡 Handles data channel communication  
-- 📦 Implements smart file chunking
-- 📊 Real-time progress tracking
-- 🔄 Automatic reconnection logic
+- 📡 Handles control + binary data channel communication  
+- 📦 Implements smart chunking with binary-first + fallback flow
+- 🧩 Supports missing-chunk recovery/retry flow
+- 🔐 Performs SHA-256 file integrity verification
+- 💾 Supports IndexedDB-backed chunk persistence for larger files
+- 📊 Real-time progress tracking + synchronized terminal state handling
 
 </td>
 <td width="50%">
@@ -526,7 +581,8 @@ p2p-react/
 - 🏠 Secure room management
 - 🤝 WebRTC offer/answer exchange
 - 🧊 ICE candidate coordination
-- ⏱️ Connection timeout handling
+- 🔁 Dynamic TURN/STUN update handling from signaling server
+- ⏱️ Connection timeout and reconnection handling
 
 </td>
 </tr>
@@ -549,9 +605,9 @@ p2p-react/
 - **File Processing**: Advanced chunking, validation & metadata extraction
 - **QR Code Generation**: Dynamic QR codes with error correction
 - **Error Handling**: Comprehensive error management & recovery
-- **Performance**: Optimized for large files with memory management
+- **Performance**: Optimized for large files with adaptive chunk behavior and persistent chunk storage
 - **Analytics Integration**: Vercel Analytics & Speed Insights
-- **Environment Configuration**: Multi-environment support with TURN/STUN servers
+- **Environment Configuration**: Multi-environment support with TURN/STUN and security controls
 
 </td>
 </tr>
@@ -615,22 +671,28 @@ p2p-react/
 ### 🛡️ **Your Privacy is Our Priority**
 
 ![Security Features](https://img.shields.io/badge/Privacy-First-green?style=for-the-badge)
-![No Tracking](https://img.shields.io/badge/No-Tracking-blue?style=for-the-badge)
+![Security Hardening](https://img.shields.io/badge/Security-Hardened-blue?style=for-the-badge)
 ![Open Source](https://img.shields.io/badge/Open-Source-orange?style=for-the-badge)
 
 </div>
 
-### �️ **Security Architecture**
+### 🛡️ **Security Architecture**
 
-| � **Feature** | 📝 **Implementation** |
+| 🔐 **Feature** | 📝 **Implementation** |
 |:----------------|:----------------------|
 | **🚫 Zero Server Storage** | Files stream directly between devices via WebRTC |
 | **⏱️ Temporary Sessions** | Room codes auto-expire after transfers complete |
-| **🔐 Encrypted Signaling** | Secure WebSocket connections for peer discovery |
+| **🔐 Secure Signaling Path** | Strict payload validation + role/room authorization checks |
 | **🏠 Isolated Rooms** | Each transfer gets unique, private room code |
-| **🌐 Browser Sandbox** | Runs in secure browser environment with OS-level protection |
-| **🔍 No Analytics** | Zero tracking, logging, or data collection |
+| **🌐 CORS and Abuse Controls** | Tight allowlist CORS, per-IP/per-socket rate limits, payload size limits |
+| **🧱 Browser Sandbox + CSP** | Secure browser sandbox with security headers and baseline CSP |
+| **🏥 Health Endpoint Hardening** | Public liveness only + protected diagnostics endpoint |
+| **🧹 Production Log Hygiene** | Sensitive runtime context suppressed/sanitized in production |
 | **📖 Open Source** | Full code transparency for community security audits |
+
+### ✅ **Security Hardening Status**
+
+All planned 10 hardening items are completed in this repo (event auth, abuse controls, CORS tightening, dependency patching, headers/CSP, health endpoint split, TURN model hardening, CSPRNG room codes, log sanitization, service worker cache hardening).
 
 ### 🔧 **Development Environment**
 
@@ -650,35 +712,37 @@ npm run dev
 ```
 
 **🚀 Key Technologies**
-- **Framework**: Next.js 15.4.6 with App Router and Turbopack
-- **UI**: React 19 + TypeScript 5+ + Tailwind CSS + shadcn/ui
+- **Framework**: Next.js 15.5.12 with App Router and Turbopack
+- **UI**: React 19.1.0 + TypeScript 5+ + Tailwind CSS + shadcn/ui
 - **P2P**: WebRTC + Socket.IO 4.8.1 for real-time communication
 - **Tools**: @yudiel/react-qr-scanner, Vercel Analytics, ESLint 9
 
-## � Troubleshooting
+## 🔧 Troubleshooting
 
 ### **Common Issues & Solutions**
 
 | 🚨 **Issue** | 🔧 **Solution** |
 |:-------------|:----------------|
-| **Files won't transfer** | Check if both devices are on the same network or if firewall is blocking WebRTC |
-| **QR code won't scan** | Ensure camera permissions are granted and try manual room code entry |
-| **Large files fail** | Use smaller file sizes on mobile devices due to memory limitations |
-| **Connection timeout** | Try refreshing both devices and ensure stable internet connection |
-| **Slow transfer speeds** | Connect devices to same WiFi network for optimal performance |
+| **Files won't transfer** | Confirm both peers are connected and signaling server is reachable. Check firewall/NAT restrictions on WebRTC traffic. |
+| **Transfer incomplete / missing chunks** | Retry transfer with stable network on both sides. Keep both tabs active until final completion confirmation. |
+| **Sender/receiver status mismatch** | Update both sides to latest build and ensure signaling server is also updated to matching protocol changes. |
+| **QR code won't scan** | Confirm camera permission, improve lighting, hold steady, or use manual room code entry as fallback. |
+| **Large files fail on mobile** | Use smaller batches on low-memory devices. IndexedDB helps, but very large files can still hit browser limits. |
+| **Slow transfer speeds** | Prefer same WiFi network and avoid VPN/proxy paths when possible. TURN relay routes may be slower than direct P2P. |
 
 ### **Browser & Platform Support**
 - ✅ **Chrome/Chromium 90+**: Full support with best performance
 - ✅ **Firefox 88+**: Full support with excellent compatibility  
 - ✅ **Safari 14+**: Full support on macOS and iOS
 - ✅ **Edge 90+**: Full support on Windows
-- ✅ **Mobile browsers**: Supported with memory limitations (recommended <100MB files)
+- ✅ **Mobile browsers**: Supported, but practical limits depend on device memory and browser behavior
 - ✅ **Cross-Platform**: Windows, macOS, Linux, iOS, Android - works everywhere
 
 ### **Performance Optimization**
 - Use WiFi instead of mobile data for fastest transfers
 - Close other browser tabs during large file transfers
 - Ensure both devices have sufficient battery and stable connection
+- Keep signaling + frontend versions aligned when deploying from separate repos
 
 ## 🚀 Deployment
 
@@ -713,6 +777,7 @@ NEXT_PUBLIC_TURN_URLS=turn:your-turn-server.com:3478?transport=udp,turn:your-tur
 NEXT_PUBLIC_TURN_USER=your-username
 NEXT_PUBLIC_TURN_PASS=your-password
 NEXT_PUBLIC_STUN_URLS=stun:your-stun-server.com:3478,stun:stun.l.google.com:19302
+NEXT_PUBLIC_ENABLE_CLIENT_LOGS=false
 
 # Signaling server (server-side only; do NOT expose publicly)
 TURN_URLS=turn:your-turn-server.com:3478?transport=udp,turn:your-turn-server.com:3478?transport=tcp
@@ -720,6 +785,10 @@ TURN_USERNAME=your-username
 TURN_CREDENTIAL=your-password
 STUN_URLS=stun:your-stun-server.com:3478
 ALLOW_INSECURE_PUBLIC_TURN_FALLBACK=false
+SIGNALING_HEALTH_DIAGNOSTICS_TOKEN=replace-with-strong-random-token
+SIGNALING_CORS_ALLOWED_ORIGINS=https://your-frontend-domain.com
+SIGNALING_DEV_CORS_ALLOWED_ORIGINS=http://localhost:3000
+SIGNALING_LOG_LEVEL=info
 NODE_ENV=production
 ```
 
@@ -834,7 +903,7 @@ All contributors get:
 
 </details>
 
-## � Support & Community
+## 💬 Support & Community
 
 <div align="center">
 
@@ -871,7 +940,7 @@ All contributors get:
 
 ---
 
-## �📄 License
+## 📄 License
 
 <div align="center">
 

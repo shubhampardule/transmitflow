@@ -53,6 +53,7 @@ const HEALTH_DIAGNOSTICS_TOKEN =
   '';
 
 const DEFAULT_PRODUCTION_ORIGINS = [
+  'https://transmitflow.vercel.app',
   'https://sendify-ivory.vercel.app',
   'https://sendify-ten.vercel.app',
   'https://sendify.vercel.app',
