@@ -19,17 +19,32 @@ const normalizeRoomCode = (value: string): string => (
   value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
 );
 
+const tryParseUrl = (value: string): URL | null => {
+  try {
+    return new URL(value);
+  } catch {
+    // Fall through to add scheme when missing.
+  }
+
+  if (!/^https?:\/\//i.test(value) && value.includes('.')) {
+    try {
+      return new URL(`https://${value}`);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
 const extractRoomCodeFromScan = (rawValue: string): string | null => {
   const trimmed = rawValue.trim();
   if (!trimmed) return null;
 
-  const normalizedDirect = normalizeRoomCode(trimmed);
-  if (ROOM_CODE_REGEX.test(normalizedDirect)) {
-    return normalizedDirect;
-  }
+  const upper = trimmed.toUpperCase();
 
-  try {
-    const parsedUrl = new URL(trimmed);
+  const parsedUrl = tryParseUrl(trimmed);
+  if (parsedUrl) {
     const receiveParam = parsedUrl.searchParams.get('receive');
     if (receiveParam) {
       const normalizedParam = normalizeRoomCode(receiveParam);
@@ -37,11 +52,20 @@ const extractRoomCodeFromScan = (rawValue: string): string | null => {
         return normalizedParam;
       }
     }
-  } catch {
-    // Not a URL or malformed URL, continue with regex fallback.
   }
 
-  const regexMatch = trimmed.toUpperCase().match(/[A-Z0-9]{8}/);
+  const receiveMatch = upper.match(/RECEIVE=([A-Z0-9]{8})/);
+  if (receiveMatch) {
+    return receiveMatch[1];
+  }
+
+  const normalizedDirect = normalizeRoomCode(trimmed);
+  const directCandidateLength = trimmed.replace(/[^A-Z0-9]/gi, '').length;
+  if (directCandidateLength <= 8 && ROOM_CODE_REGEX.test(normalizedDirect)) {
+    return normalizedDirect;
+  }
+
+  const regexMatch = upper.match(/[A-Z0-9]{8}/);
   if (regexMatch) {
     return regexMatch[0];
   }

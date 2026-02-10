@@ -13,7 +13,7 @@
 
 > **🔄 Updated: February 10, 2026 - Major reliability, security hardening, QR, and PWA upgrades**
 
-[🚀 Live Demo](https://transmitflow.vercel.app) • [📖 Documentation](https://github.com/shubhampardule/transmitflow/wiki) • [🐛 Report Bug](https://github.com/shubhampardule/transmitflow/issues) • [✨ Request Feature](https://github.com/shubhampardule/transmitflow/issues)
+[🚀 Live Demo](https://transmitflow.vercel.app) • [📖 Documentation](docs/ARCHITECTURE.md) • [🐛 Report Bug](https://github.com/shubhampardule/transmitflow/issues) • [✨ Request Feature](https://github.com/shubhampardule/transmitflow/issues)
 
 > **Deployed on Vercel for fast, global delivery.**
 </div>
@@ -957,6 +957,18 @@ This project is licensed under the **Creative Commons Attribution-NonCommercial 
 **❌ Not Allowed:**
 - Commercial use
 - Selling or monetizing the software
+
+</div>
+
+## ⚖️ Governance & Policy
+
+<div align="center">
+
+Please review our community policies before contributing:
+
+[![Code of Conduct](https://img.shields.io/badge/Code%20of%20Conduct-Violators%20Will%20Be%20Banned-red?style=for-the-badge)](CODE_OF_CONDUCT.md)
+[![Contributing](https://img.shields.io/badge/Contributing-Guidelines-blue?style=for-the-badge)](CONTRIBUTING.md)
+[![Security](https://img.shields.io/badge/Security-Policy-green?style=for-the-badge)](SECURITY.md)
 
 </div>
 
