@@ -1,6 +1,7 @@
-const SHELL_CACHE = 'transmitflow-shell-v1';
-const RUNTIME_CACHE = 'transmitflow-runtime-v1';
+const SHELL_CACHE = 'transmitflow-shell-v2';
+const RUNTIME_CACHE = 'transmitflow-runtime-v2';
 const OFFLINE_URL = '/offline';
+const SENSITIVE_NAVIGATION_QUERY_KEYS = new Set(['receive', 'sharing']);
 const APP_SHELL = [
   '/',
   OFFLINE_URL,
@@ -9,6 +10,20 @@ const APP_SHELL = [
   '/pwa-192.svg',
   '/pwa-512.svg',
 ];
+
+function hasSensitiveNavigationQuery(url) {
+  for (const key of url.searchParams.keys()) {
+    if (SENSITIVE_NAVIGATION_QUERY_KEYS.has(key.toLowerCase())) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getNormalizedNavigationCacheKey(url) {
+  return `${url.origin}${url.pathname}`;
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -51,6 +66,10 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (request.mode === 'navigate') {
+    const shouldCacheNavigation =
+      url.origin === self.location.origin && !hasSensitiveNavigationQuery(url);
+    const navigationCacheKey = getNormalizedNavigationCacheKey(url);
+
     event.respondWith(
       (async () => {
         try {
@@ -60,13 +79,22 @@ self.addEventListener('fetch', (event) => {
           }
 
           const networkResponse = await fetch(request);
-          const runtimeCache = await caches.open(RUNTIME_CACHE);
-          runtimeCache.put(request, networkResponse.clone());
+          if (shouldCacheNavigation && networkResponse.ok) {
+            const runtimeCache = await caches.open(RUNTIME_CACHE);
+            runtimeCache.put(navigationCacheKey, networkResponse.clone());
+          }
           return networkResponse;
         } catch (error) {
-          const cachedPage = await caches.match(request);
-          if (cachedPage) {
-            return cachedPage;
+          if (shouldCacheNavigation) {
+            const cachedPage = await caches.match(navigationCacheKey);
+            if (cachedPage) {
+              return cachedPage;
+            }
+          }
+
+          const cachedRoot = await caches.match('/');
+          if (cachedRoot) {
+            return cachedRoot;
           }
 
           const offlineResponse = await caches.match(OFFLINE_URL);
