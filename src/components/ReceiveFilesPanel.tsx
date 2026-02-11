@@ -137,18 +137,7 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
 
   const handleScanError = useCallback((error: unknown) => {
     console.error('QR scan error:', error);
-    const msg = error instanceof Error ? error.message : String(error);
-    const lower = msg.toLowerCase();
-
-    if (lower.includes('permission') || lower.includes('denied') || lower.includes('notallowed')) {
-      setScanMessage('Camera permission denied. Please allow camera access in your browser settings.');
-    } else if (lower.includes('secure') || lower.includes('https') || lower.includes('notreadable') || lower.includes('not found')) {
-      setScanMessage(
-        'Camera not available. On mobile, open this page over HTTPS or localhost.'
-      );
-    } else {
-      setScanMessage('Unable to read QR right now. Move closer and improve lighting.');
-    }
+    setScanMessage('Unable to read QR right now. Move closer and improve lighting.');
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
