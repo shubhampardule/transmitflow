@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import PwaManager from '@/components/ui/PwaManager';
 import ProductionLogGuard from '@/components/ui/ProductionLogGuard';
+import ThemeProvider from '@/components/ui/ThemeProvider';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,10 +34,9 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/pwa-192.svg", type: "image/svg+xml" },
+      { url: "/icon.svg", type: "image/svg+xml" },
     ],
-    shortcut: [{ url: "/favicon.ico" }],
+    shortcut: [{ url: "/icon.svg" }],
     apple: [{ url: "/pwa-192.svg", type: "image/svg+xml" }],
   },
 };
@@ -57,15 +57,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning={true}
       >
-        <ProductionLogGuard />
-        <PwaManager />
-        {children}
-        <SpeedInsights />
+        <ThemeProvider>
+          <ProductionLogGuard />
+          <PwaManager />
+          {children}
+          <SpeedInsights />
+        </ThemeProvider>
       </body>
     </html>
   );

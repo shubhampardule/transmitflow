@@ -45,6 +45,13 @@
   --ring: 0 0% 83.1%;
 }
 
+/* Disable default crossfade so only the circle animation plays */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
 @layer base {
   * {
     @apply border-border;
