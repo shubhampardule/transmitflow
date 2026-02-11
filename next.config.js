@@ -67,6 +67,7 @@ const buildContentSecurityPolicy = () => {
     ...signalingOrigins.map(toWebsocketOrigin),
     'https://vitals.vercel-insights.com',
     'https://*.vercel-insights.com',
+    'https://fastly.jsdelivr.net',
   ]);
 
   return [
@@ -82,7 +83,7 @@ const buildContentSecurityPolicy = () => {
     `connect-src ${connectSources.join(' ')}`,
     "worker-src 'self' blob:",
     "manifest-src 'self'",
-    "media-src 'self' blob:",
+    "media-src 'self' blob: data:",
     'upgrade-insecure-requests',
   ].join('; ');
 };

@@ -8,7 +8,7 @@ test.describe('Smoke Tests', () => {
     // Check for title or main heading
     // Adjust selector based on actual UI
     await expect(page).toHaveTitle(/TransmitFlow/i);
-    await expect(page.getByText('Seamless Transmission')).toBeVisible();
+    await expect(page.getByText('Seamless file transmission')).toBeVisible();
     
     // Check for main action buttons/tabs
     await expect(page.getByText('Send')).toBeVisible();
