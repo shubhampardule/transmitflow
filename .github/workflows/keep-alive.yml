@@ -1,0 +1,22 @@
+name: Keep Alive
+
+on:
+  schedule:
+    # Ping every 14 minutes to prevent Render free tier spin-down
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Ping signaling server
+      run: |
+        echo "Pinging signaling server..."
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://signaling-server-6ziv.onrender.com)
+        echo "Status: $HTTP_STATUS"
+        if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 500 ]; then
+          echo "Server is alive"
+        else
+          echo "Server returned unexpected status"
+        fi
