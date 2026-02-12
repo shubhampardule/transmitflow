@@ -1053,6 +1053,8 @@ function createRoom(roomId) {
           if (socket) {
             socket.emit('room-expired');
             socket.leave(roomId);
+            socket.roomId = null;
+            socket.role = null;
           }
         });
         cleanup(roomId);

@@ -185,6 +185,7 @@ export default function P2PFileTransfer() {
 
   const resetToTab = useCallback((tab: 'send' | 'receive') => {
     webrtcService.cleanup();
+    signalingService.leaveRoom();
     // Keep core signaling listeners registered (room-full/busy/expired/etc.).
     resetTransferRuntimeState();
     senderFilesRef.current = [];
@@ -364,6 +365,7 @@ export default function P2PFileTransfer() {
     });
 
     signalingService.onRoomExpired(() => {
+      signalingService.leaveRoom();
       if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
         return;
       }
