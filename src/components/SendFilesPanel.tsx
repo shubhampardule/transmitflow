@@ -4,12 +4,13 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Upload, FileText, Trash2, QrCode, Copy, Link2 } from 'lucide-react';
+import { Upload, Trash2, QrCode, Copy, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import QRCode from 'qrcode';
 
 import { formatFileSize } from '@/lib/file-utils';
+import { getFileIcon } from '@/lib/file-icons';
 
 interface SendFilesPanelProps {
   onSendFiles: (files: File[]) => void;
@@ -21,6 +22,8 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [showQrCode, setShowQrCode] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getShareUrl = useCallback(() => {
@@ -133,6 +136,8 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
 
   const handleDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
     const files = Array.from(event.dataTransfer.files);
     if (files.length > 0) {
       setSelectedFiles((prev) => {
@@ -158,6 +163,23 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
 
   const handleDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
+  }, []);
+
+  const handleDragEnter = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    dragCounterRef.current += 1;
+    if (dragCounterRef.current === 1) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragging(false);
+    }
   }, []);
 
   const removeFile = useCallback((index: number) => {
@@ -281,17 +303,20 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
             <Badge variant="secondary" className="text-xs">{selectedFiles.length}</Badge>
           </div>
           <div className="space-y-2">
-            {selectedFiles.map((file, index) => (
+            {selectedFiles.map((file, index) => {
+              const Icon = getFileIcon(file.name, file.type);
+              return (
               <div key={index} className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl">
                 <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center">
-                  <FileText className="h-4 w-4 text-indigo-500" />
+                  <Icon className="h-4 w-4 text-indigo-500" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="font-medium text-sm truncate">{file.name}</div>
                   <div className="text-xs text-muted-foreground">{formatFileSize(file.size)}</div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
           <div className="mt-4 pt-4 border-t border-border/60 flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Total</span>
@@ -307,22 +332,40 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
       {/* Drop zone */}
       {selectedFiles.length === 0 && (
         <div
-          className="relative border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-indigo-400/50 dark:hover:border-indigo-500/30 transition-all cursor-pointer group overflow-hidden"
+          className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-colors duration-200 cursor-pointer group overflow-hidden ${
+            isDragging
+              ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-500/10 shadow-lg shadow-indigo-500/10'
+              : 'border-border hover:border-indigo-400/50 dark:hover:border-indigo-500/30'
+          }`}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
           onClick={() => fileInputRef.current?.click()}
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/0 to-indigo-50/0 group-hover:from-indigo-50/60 group-hover:to-purple-50/40 dark:group-hover:from-indigo-500/5 dark:group-hover:to-purple-500/5 transition-all duration-300" />
+          <div className={`absolute inset-0 transition-all duration-300 ${
+            isDragging
+              ? 'bg-gradient-to-br from-indigo-50/80 to-purple-50/60 dark:from-indigo-500/10 dark:to-purple-500/8'
+              : 'bg-gradient-to-br from-indigo-50/0 to-indigo-50/0 group-hover:from-indigo-50/60 group-hover:to-purple-50/40 dark:group-hover:from-indigo-500/5 dark:group-hover:to-purple-500/5'
+          }`} />
           <div className="relative space-y-4">
-            <div className="mx-auto w-fit rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 p-4 group-hover:scale-110 transition-transform duration-300">
-              <Upload className="h-7 w-7 text-indigo-500" />
+            <div className={`mx-auto w-fit rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 p-4 transition-transform duration-300 ${
+              isDragging ? 'scale-110' : 'group-hover:scale-110'
+            }`}>
+              <Upload className={`h-7 w-7 transition-colors duration-200 ${
+                isDragging ? 'text-indigo-600 dark:text-indigo-300' : 'text-indigo-500'
+              }`} />
             </div>
             <div>
-              <p className="text-base font-semibold">Choose files to share</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Drop files here or click to browse
+              <p className="text-base font-semibold">
+                {isDragging ? 'Drop files here' : 'Choose files to share'}
               </p>
-              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2">
+              <p className="text-sm text-muted-foreground mt-1">
+                {isDragging ? 'Release to add files' : 'Drop files here or click to browse'}
+              </p>
+              <p className={`text-[11px] mt-2 transition-opacity duration-200 ${
+                isDragging ? 'opacity-0' : 'opacity-100 text-amber-600 dark:text-amber-400'
+              }`}>
                 Large files may be slow on mobile connections
               </p>
             </div>
@@ -362,10 +405,12 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
           </div>
 
           <div className="space-y-2 max-h-44 md:max-h-60 overflow-y-auto pr-1">
-            {selectedFiles.map((file, index) => (
+            {selectedFiles.map((file, index) => {
+              const Icon = getFileIcon(file.name, file.type);
+              return (
               <div key={index} className="flex items-center gap-3 p-2.5 md:p-3 bg-muted/40 rounded-xl group/item">
                 <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center">
-                  <FileText className="h-4 w-4 text-violet-500" />
+                  <Icon className="h-4 w-4 text-violet-500" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="font-medium text-sm truncate">{file.name}</div>
@@ -382,7 +427,8 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-border/60">

@@ -10,7 +10,6 @@ import {
   XCircle, 
   Loader2, 
   Download, 
-  FileText, 
   QrCode,
   X,
   RotateCcw,
@@ -18,6 +17,7 @@ import {
   Link2,
   ArrowLeft
 } from 'lucide-react';
+import { getFileIcon } from '@/lib/file-icons';
 import { toast } from 'sonner';
 import QRCode from 'qrcode';
 
@@ -441,7 +441,7 @@ export default function TransferProgress({
                     {/* File Info Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                        {(() => { const Icon = getFileIcon(file.name, file.type); return <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />; })()}
                         <div className="flex-1 min-w-0">
                           <div className="font-medium truncate">{file.name}</div>
                           <div className="text-sm text-muted-foreground">

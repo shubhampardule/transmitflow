@@ -312,6 +312,69 @@ Done when:
 
 ---
 
+## UI/UX Improvement Plan
+
+### 24. Drag-over visual feedback on file drop zone (P1)
+Status: `Completed`
+
+Scope:
+- Add visual state change (highlighted border, background shift) when dragging files over the drop zone.
+- Clear visual feedback is table-stakes UX for drag-and-drop interactions.
+
+Done when:
+- Users see a clear visual cue when hovering files over the drop zone.
+- Feedback disappears on drag leave or drop.
+
+### 25. File type icon differentiation (P2)
+Status: `Completed`
+
+Scope:
+- Replace the generic `FileText` icon with type-specific icons (image, video, zip, pdf, audio, etc.).
+- Make the file list scannable at a glance.
+
+Done when:
+- Different file types show visually distinct icons.
+- Unknown types fall back to the generic file icon.
+
+Implementation:
+- Created `src/lib/file-icons.ts` with `getFileIcon()` utility mapping extensions and MIME types to Lucide icons (FileImage, FileVideo, FileAudio, FileArchive, FileCode, FileSpreadsheet, FileText, File).
+- Applied in `SendFilesPanel.tsx` (queued files + selected files lists) and `TransferProgress.tsx` (transfer file list).
+
+### 26. QR code dark mode adaptation (P2)
+Status: `Not Started`
+
+Scope:
+- The forced white QR background looks jarring in dark mode.
+- Adapt QR colours/background to match the current theme.
+
+Done when:
+- QR code looks natural in both light and dark modes.
+
+### 27. Native share on mobile via Web Share API (P2)
+Status: `Not Started`
+
+Scope:
+- Use `navigator.share()` for "Share room link" on supported mobile browsers.
+- Fall back to clipboard copy on unsupported browsers.
+
+Done when:
+- Mobile users see the native share sheet when sharing a room link.
+- Desktop users continue to use clipboard copy.
+
+### 28. Break up P2PFileTransfer god component (P1)
+Status: `Not Started`
+
+Scope:
+- Extract landing page sections (hero, features, footer, navbar) into separate components.
+- Keep `P2PFileTransfer` focused on transfer state machine and signaling wiring.
+- Improve maintainability and enable targeted UX iteration.
+
+Done when:
+- `P2PFileTransfer` is under ~400 lines.
+- Landing page layout is composed from independent, reusable components.
+
+---
+
 ## Verification Template (Use After Each Step)
 - Implemented changes:
 - Files touched:

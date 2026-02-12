@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- File-type aware icon mapping utility for transfer lists (`src/lib/file-icons.ts`).
+
 ### Changed
 - Versioning prepared for next incremental updates.
+- Drag-and-drop zone now shows clear active-state feedback during file hover.
+- File entries now render type-specific icons (image, video, audio, archive, code, spreadsheet, generic fallback).
 
 ## [0.2.0] - 2026-02-12
 
@@ -32,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mobile status card alignment and spacing issues for long messages.
 
 ### Security
-- Completed the remaining hardening roadmap steps 18–23 (readiness UX, safer recovery, accessibility, reassurance messaging).
+- Completed the remaining hardening (readiness UX, safer recovery, accessibility, reassurance messaging).
 - Added room leave handling for cleaner session teardown before rejoin/retry.
 
 ### Added
