@@ -249,7 +249,8 @@ const turnServers = [
   }] : []),
 ];
 
-const ROOM_CODE_REGEX = /^[A-Z0-9]{8}$/;
+// Accept 4-char room codes (current client UX) and 8-char codes (legacy links).
+const ROOM_CODE_REGEX = /^(?:[A-Z0-9]{4}|[A-Z0-9]{8})$/;
 const VALID_PARTICIPANT_ROLES = new Set(['sender', 'receiver']);
 const VALID_NETWORK_TYPES = new Set(['wifi', 'cellular', 'ethernet', 'unknown']);
 const VALID_CONNECTION_STATES = new Set([

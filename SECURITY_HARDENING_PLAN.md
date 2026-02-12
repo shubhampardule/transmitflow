@@ -10,7 +10,7 @@ Harden TransmitFlow for production internet usage by implementing security contr
 
 ## Status
 - Overall: `In Progress`
-- Current step: `18`
+- Current step: `19`
 
 ## Step-by-Step Plan
 
@@ -242,7 +242,7 @@ Done when:
 - Security hardening outcomes are documented publicly.
 
 ### 18. Add connection readiness UX and non-blocking states (P2)
-Status: `Not Started`
+Status: `Completed`
 
 Scope:
 - Add a small, always-visible status indicator for signaling readiness (e.g., Connecting / Ready / Offline).
