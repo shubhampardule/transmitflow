@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Versioning prepared for next incremental updates.
+
+## [0.2.0] - 2026-02-12
+
+### Added
+- Clear sender/receiver recovery actions for timeout, disconnect, and failure states.
+- One-click share actions across flows (copy code, copy link, QR toggle).
+- Role-aware reassurance copy during connecting/transferring states.
+- Sender retry behavior that creates a fresh room code after terminal errors.
+
+### Changed
+- Room code UX standardized around 4-character codes.
+- Mobile transfer layout improved to keep primary actions and file context visible.
+- Selected-files flow now supports appending files with a dedicated "Select more files" action.
+- Transfer progress readability improved (`<1%` for early progress, delayed ETA until stable).
+- Accessibility and motion handling improved (focus visibility, ARIA labels, reduced-motion support).
+
+### Fixed
+- QR scan fallback and CSP/WASM production compatibility issues.
+- Input composition handling for room code entry on mobile keyboards.
+- Sender/receiver action visibility mismatches in transfer screens.
+- Mobile status card alignment and spacing issues for long messages.
+
+### Security
+- Completed the remaining hardening roadmap steps 18–23 (readiness UX, safer recovery, accessibility, reassurance messaging).
+- Added room leave handling for cleaner session teardown before rejoin/retry.
+
 ### Added
 - Binary-first transfer path with automatic compatibility fallback
 - IndexedDB chunk storage support

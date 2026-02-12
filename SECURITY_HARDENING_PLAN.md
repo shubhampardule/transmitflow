@@ -9,8 +9,8 @@ Harden TransmitFlow for production internet usage by implementing security contr
 - After each item, we run tests/lint/build and a focused security check for that scope.
 
 ## Status
-- Overall: `In Progress`
-- Current step: `20`
+- Overall: `Completed`
+- Current step: `Completed`
 
 ## Step-by-Step Plan
 
@@ -267,7 +267,7 @@ Done when:
 - Receiver can always proceed even if QR is unavailable.
 
 ### 20. Add safe error recovery actions (P2)
-Status: `Not Started`
+Status: `Completed`
 
 Scope:
 - On common connection/session errors, offer explicit next actions (Retry connect / Create new room / Switch to Receive).
@@ -278,7 +278,7 @@ Done when:
 - Recovery actions are verified not to leak state between rooms/sessions.
 
 ### 21. Mobile-first flow polish for primary actions (P3)
-Status: `Not Started`
+Status: `Completed`
 
 Scope:
 - Tighten spacing and keep the primary action visible on mobile where possible.
@@ -288,7 +288,7 @@ Done when:
 - On small screens, users can start sharing/connecting without hunting for the primary button.
 
 ### 22. Accessibility + reduced-motion audit for the new UI (P2)
-Status: `Not Started`
+Status: `Completed`
 
 Scope:
 - Ensure keyboard navigation order is correct for tabs, buttons, inputs.
@@ -300,7 +300,7 @@ Done when:
 - Reduced-motion users get a calmer experience without losing functionality.
 
 ### 23. Improve transfer reassurance messaging (P3)
-Status: `Not Started`
+Status: `Completed`
 
 Scope:
 - Add a concise "what's happening" line during Connecting/Transferring states (e.g., signaling, negotiating, transferring).

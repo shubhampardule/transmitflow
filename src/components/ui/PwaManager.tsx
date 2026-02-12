@@ -10,9 +10,42 @@ interface DeferredInstallPromptEvent extends Event {
 
 type NetworkBannerState = 'hidden' | 'offline' | 'online';
 
+const INSTALL_CTA_AUTOHIDE_MS = 8000;
+const INSTALL_CTA_DISMISS_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const INSTALL_CTA_DISMISSED_UNTIL_KEY = 'transmitflow.installCtaDismissedUntil';
+
+const isAppInstalled = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches;
+  // iOS Safari uses navigator.standalone
+  const iosStandalone = Boolean((navigator as unknown as { standalone?: boolean }).standalone);
+  return Boolean(standalone || iosStandalone);
+};
+
+const getDismissedUntil = (): number => {
+  if (typeof window === 'undefined') {
+    return 0;
+  }
+  const raw = window.localStorage.getItem(INSTALL_CTA_DISMISSED_UNTIL_KEY);
+  const parsed = raw ? Number(raw) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const setDismissedUntil = (timestamp: number) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem(INSTALL_CTA_DISMISSED_UNTIL_KEY, String(timestamp));
+};
+
 export default function PwaManager() {
   const [networkBanner, setNetworkBanner] = useState<NetworkBannerState>('hidden');
   const [installPromptEvent, setInstallPromptEvent] = useState<DeferredInstallPromptEvent | null>(null);
+  const [showInstallCta, setShowInstallCta] = useState(false);
+  const [installed, setInstalled] = useState(() => isAppInstalled());
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) {
@@ -92,12 +125,49 @@ export default function PwaManager() {
   useEffect(() => {
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
+      if (installed || isAppInstalled()) {
+        setInstalled(true);
+        setInstallPromptEvent(null);
+        setShowInstallCta(false);
+        return;
+      }
+
+      const dismissedUntil = getDismissedUntil();
+      const now = Date.now();
+
       setInstallPromptEvent(event as DeferredInstallPromptEvent);
+      if (dismissedUntil > now) {
+        setShowInstallCta(false);
+        return;
+      }
+
+      setShowInstallCta(true);
+      window.setTimeout(() => {
+        // Auto-hide so the CTA doesn't stick on-screen.
+        setShowInstallCta(false);
+        setDismissedUntil(Date.now() + INSTALL_CTA_DISMISS_TTL_MS);
+      }, INSTALL_CTA_AUTOHIDE_MS);
     };
 
     const handleAppInstalled = () => {
       setInstallPromptEvent(null);
+      setShowInstallCta(false);
+      setInstalled(true);
     };
+
+    const displayModeQuery = window.matchMedia?.('(display-mode: standalone)');
+    const handleDisplayModeChange = () => {
+      const nextInstalled = isAppInstalled();
+      setInstalled(nextInstalled);
+      if (nextInstalled) {
+        setInstallPromptEvent(null);
+        setShowInstallCta(false);
+      }
+    };
+
+    if (displayModeQuery?.addEventListener) {
+      displayModeQuery.addEventListener('change', handleDisplayModeChange);
+    }
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
@@ -105,8 +175,11 @@ export default function PwaManager() {
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      if (displayModeQuery?.removeEventListener) {
+        displayModeQuery.removeEventListener('change', handleDisplayModeChange);
+      }
     };
-  }, []);
+  }, [installed]);
 
   const handleInstallClick = async () => {
     if (!installPromptEvent) {
@@ -117,10 +190,15 @@ export default function PwaManager() {
     const choice = await installPromptEvent.userChoice;
     if (choice.outcome === 'accepted') {
       setInstallPromptEvent(null);
+      setShowInstallCta(false);
+      setDismissedUntil(Date.now() + INSTALL_CTA_DISMISS_TTL_MS);
+    } else {
+      setShowInstallCta(false);
+      setDismissedUntil(Date.now() + INSTALL_CTA_DISMISS_TTL_MS);
     }
   };
 
-  const showInstallButton = Boolean(installPromptEvent);
+  const showInstallButton = Boolean(installPromptEvent) && showInstallCta && !installed;
 
   return (
     <>

@@ -69,6 +69,11 @@
     color: transparent;
     background-image: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
   }
+
+  .slashed-zero {
+    font-variant-numeric: slashed-zero;
+    font-feature-settings: "zero" 1;
+  }
 }
 
 /* ─── Dot grid pattern ─── */
@@ -105,4 +110,14 @@
 }
 .animate-glow-pulse {
   animation: glow-pulse 2.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob,
+  .animate-glow-pulse,
+  .animate-in,
+  .fade-in {
+    animation: none !important;
+    transition: none !important;
+  }
 }

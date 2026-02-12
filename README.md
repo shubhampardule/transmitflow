@@ -16,6 +16,14 @@
 
 ---
 
+## Latest Release (v0.2.0)
+
+- Room flow hardening completed (steps 18–23) with clearer recovery actions and safer retries.
+- Sender retry now creates a new room code after timeout/failure instead of reusing expired codes.
+- Sharing flow improved with copy code/link actions, QR controls, and clearer transfer-state messaging.
+- Mobile transfer UX refined for action visibility, file readability, and reduced scroll friction.
+- Accessibility and comfort improvements added: stronger keyboard focus behavior and reduced-motion support.
+
 ## Screenshots
 
 <div align="center">
@@ -82,7 +90,7 @@ graph LR
 
 </div>
 
-1. **Sender** selects files → a unique 8-character room code and QR code are generated.
+1. **Sender** selects files → a unique 4-character room code and QR code are generated.
 2. **Receiver** scans the QR code (or enters the code / clicks the share link).
 3. Both devices join the room through the **signaling server** (Socket.IO) which exchanges WebRTC session descriptions and ICE candidates.
 4. **STUN** discovers public IPs for NAT traversal. If direct connection fails, **TURN** relays the traffic.

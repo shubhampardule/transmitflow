@@ -83,6 +83,7 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
   const [hasAutoConnected, setHasAutoConnected] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isComposingRef = useRef(false);
 
   useEffect(() => {
     if (!receiveCode || hasAutoConnected) {
@@ -174,9 +175,29 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = normalizeRoomCode(e.target.value);
-    setRoomCode(formatted);
+    const nextRaw = e.target.value;
 
+    // Avoid breaking IME/composition flows (common on mobile) which can drop
+    // previously-entered characters when we aggressively normalize mid-compose.
+    if (isComposingRef.current) {
+      setRoomCode(nextRaw.toUpperCase());
+      return;
+    }
+
+    setRoomCode(normalizeRoomCode(nextRaw));
+
+    if (scanMessage) {
+      setScanMessage(null);
+    }
+  };
+
+  const handleCompositionStart = () => {
+    isComposingRef.current = true;
+  };
+
+  const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
+    isComposingRef.current = false;
+    setRoomCode(normalizeRoomCode(e.currentTarget.value));
     if (scanMessage) {
       setScanMessage(null);
     }
@@ -202,6 +223,7 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
               variant="ghost"
               size="sm"
               onClick={() => setShowScanner(false)}
+              aria-label="Close QR scanner"
               className="h-8 w-8 p-0 rounded-lg"
             >
               <X className="h-4 w-4" />
@@ -259,7 +281,7 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
             </div>
 
             <div className="mt-5 p-4 bg-muted/70 rounded-xl text-center">
-              <div className="font-mono text-2xl font-bold tracking-[0.35em] text-foreground">
+              <div className="font-mono slashed-zero text-2xl font-bold tracking-[0.35em] text-foreground">
                 {scannedCode}
               </div>
             </div>
@@ -305,9 +327,15 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
                   type="text"
                   value={roomCode}
                   onChange={handleInputChange}
-                  placeholder="Enter 4-digit code"
-                  className="text-center font-mono text-lg tracking-widest h-12 rounded-xl"
+                  onCompositionStart={handleCompositionStart}
+                  onCompositionEnd={handleCompositionEnd}
+                  placeholder="Enter 4-character code"
+                  className="text-center font-mono slashed-zero text-lg tracking-widest h-12 rounded-xl"
                   maxLength={4}
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoCapitalize="characters"
+                  inputMode="text"
                 />
               </div>
               {scanMessage && (
@@ -365,9 +393,15 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
                 type="text"
                 value={roomCode}
                 onChange={handleInputChange}
-                placeholder="Enter 4-digit code"
-                className="text-center font-mono text-lg tracking-widest h-12 rounded-xl"
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
+                placeholder="Enter 4-character code"
+                className="text-center font-mono slashed-zero text-lg tracking-widest h-12 rounded-xl"
                 maxLength={4}
+                autoCorrect="off"
+                spellCheck={false}
+                autoCapitalize="characters"
+                inputMode="text"
               />
             </div>
             {scanMessage && (

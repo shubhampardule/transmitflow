@@ -119,6 +119,7 @@ export default function P2PFileTransfer() {
   const transferStartedToastShownRef = useRef(false);
   const autoDownloadFailureToastShownRef = useRef(false);
   const shownToastKeysRef = useRef<Set<string>>(new Set());
+  const senderFilesRef = useRef<File[]>([]);
 
   const attemptSignalingConnect = useCallback(async () => {
     if (signalingConnectInFlightRef.current) {
@@ -147,12 +148,11 @@ export default function P2PFileTransfer() {
     if (!isOnline) {
       return { label: 'Offline', dotClass: 'bg-rose-500' };
     }
+
     if (isConnected) {
       return { label: 'Ready', dotClass: 'bg-emerald-500' };
     }
-    if (signalingError) {
-      return { label: 'Reconnecting', dotClass: 'bg-amber-500' };
-    }
+
     return { label: 'Connecting', dotClass: 'bg-amber-500' };
   })();
 
@@ -182,6 +182,29 @@ export default function P2PFileTransfer() {
     autoDownloadFailureToastShownRef.current = false;
     shownToastKeysRef.current.clear();
   }, []);
+
+  const resetToTab = useCallback((tab: 'send' | 'receive') => {
+    webrtcService.cleanup();
+    // Keep core signaling listeners registered (room-full/busy/expired/etc.).
+    resetTransferRuntimeState();
+    senderFilesRef.current = [];
+    setRoomCode('');
+    setReceivedFiles([]);
+    setTransferState({
+      status: 'idle',
+      files: [],
+      progress: [],
+    });
+    setHasNavigatedToSharing(false);
+    setActiveTab(tab);
+
+    if (typeof window !== 'undefined') {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.search = '';
+      window.history.replaceState({}, '', cleanUrl.toString());
+      window.scrollTo(0, 0);
+    }
+  }, [resetTransferRuntimeState]);
 
   const beginTransferSession = useCallback(() => {
     transferCompletedRef.current = false;
@@ -251,29 +274,16 @@ export default function P2PFileTransfer() {
 
   // Define handleReset first since other functions depend on it
   const handleReset = useCallback(() => {
-    webrtcService.cleanup();
-    signalingService.removeAllListeners();
-    resetTransferRuntimeState();
-    setRoomCode('');
-    setReceivedFiles([]);
-    setTransferState({
-      status: 'idle',
-      files: [],
-      progress: [],
-    });
-    setHasNavigatedToSharing(false);
-    
-    // Force return to Send tab when resetting
-    setActiveTab('send');
-    
-    // Redirect to main page for clean state
-    if (typeof window !== 'undefined') {
-      console.log('Redirecting to main page for clean reset');
-      window.location.href = window.location.origin;
-    }
-    
-    console.log('Reset complete - redirected to main page');
-  }, [resetTransferRuntimeState]);
+    resetToTab('send');
+  }, [resetToTab]);
+
+  const handleBackToSend = useCallback(() => {
+    resetToTab('send');
+  }, [resetToTab]);
+
+  const handleBackToReceive = useCallback(() => {
+    resetToTab('receive');
+  }, [resetToTab]);
 
   // Auto-switch to receive tab when QR code URL is detected (client-side only)
   useEffect(() => {
@@ -751,6 +761,8 @@ export default function P2PFileTransfer() {
     console.log('handleSendFiles called in main component');
     console.log('isConnected:', isConnected);
     console.log('files:', files);
+
+    senderFilesRef.current = files;
     
     if (!isConnected) {
       console.log('Not connected to signaling server');
@@ -852,6 +864,86 @@ export default function P2PFileTransfer() {
     }
   }, [beginTransferSession, finalizeTransfer, isConnected, notifyOnce]);
 
+  const handleRetry = useCallback(() => {
+    void (async () => {
+      try {
+        await attemptSignalingConnect();
+      } catch {
+        // Retry is best-effort; UI already shows offline/connecting.
+      }
+
+      if (activeTab === 'send') {
+        const files = senderFilesRef.current;
+        if (!files || files.length === 0) {
+          const message = 'Please select files again to create a new room.';
+          finalizeTransfer('error', message, message);
+          return;
+        }
+
+        try {
+          signalingService.leaveRoom();
+
+          beginTransferSession();
+          setReceivedFiles([]);
+
+          const code = generateRoomCode();
+          setRoomCode(code);
+          setHasNavigatedToSharing(true);
+
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('sharing', code);
+          window.history.replaceState({ sharing: true, roomCode: code }, '', currentUrl.toString());
+
+          setTransferState({
+            status: 'connecting',
+            files: files.map((f, index) => ({
+              name: f.name,
+              size: f.size,
+              type: f.type,
+              lastModified: f.lastModified,
+              fileIndex: index,
+            })),
+            progress: [],
+            error: undefined,
+          });
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+
+          let senderInitialized = false;
+          signalingService.onPeerJoined(async () => {
+            if (senderInitialized || transferFinalizedRef.current) {
+              return;
+            }
+            senderInitialized = true;
+
+            notifyOnce('peer-connected', 'success', 'Receiver connected. Starting transfer...');
+            try {
+              await webrtcService.initializeAsSender(code, files);
+            } catch (error) {
+              console.error('Failed to initialize sender after retry:', error);
+              const message = 'Failed to establish sender connection. Please retry.';
+              finalizeTransfer('error', message, message);
+            }
+          });
+
+          signalingService.joinRoom(code, { role: 'sender' });
+          notifyOnce('retry-new-room', 'info', 'New room code created. Share this code with receiver.');
+        } catch (error) {
+          console.error('Failed to create a new room on retry:', error);
+          const message = 'Could not create a new room. Please retry.';
+          finalizeTransfer('error', message, message);
+        }
+
+        return;
+      }
+
+      // Receiver retry: rejoin the same room code.
+      if (activeTab === 'receive' && roomCode) {
+        await handleReceiveFiles(roomCode);
+      }
+    })();
+  }, [activeTab, attemptSignalingConnect, beginTransferSession, finalizeTransfer, handleReceiveFiles, notifyOnce, roomCode]);
+
   const handleCancelTransfer = useCallback(() => {
     webrtcService.cancelTransfer();
     handleReset();
@@ -881,7 +973,7 @@ export default function P2PFileTransfer() {
               <span className={`h-2 w-2 rounded-full ${signalingStatus.dotClass}`} />
               <span>{signalingStatus.label}</span>
             </div>
-            <a href="https://github.com/shubhampardule/transmitflow" target="_blank" rel="noopener noreferrer" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" title="GitHub">
+            <a href="https://github.com/shubhampardule/transmitflow" target="_blank" rel="noopener noreferrer" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60" title="GitHub" aria-label="Open TransmitFlow GitHub repository">
               <svg className="h-[18px] w-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
             </a>
             <ThemeToggle />
@@ -926,7 +1018,7 @@ export default function P2PFileTransfer() {
                           </div>
                         )}
                         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'send' | 'receive')} className="w-full">
-                          <TabsList className="grid w-full grid-cols-2 h-11 rounded-lg bg-muted p-1">
+                          <TabsList className="grid w-full grid-cols-2 h-11 rounded-lg bg-muted p-1" aria-label="Transfer mode">
                             <TabsTrigger value="send" className="flex items-center gap-2 rounded-md text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm">
                               <Upload className="h-4 w-4" />
                               Send
@@ -1099,6 +1191,9 @@ export default function P2PFileTransfer() {
                       onReset={handleReset}
                       onCancelFile={handleCancelFile}
                       role={activeTab}
+                      onRetry={handleRetry}
+                      onBackToSend={handleBackToSend}
+                      onBackToReceive={handleBackToReceive}
                     />
                   </div>
                 </div>

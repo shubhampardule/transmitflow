@@ -1261,6 +1261,32 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('leave-room', () => {
+    const currentRoomId = socket.roomId;
+    if (!currentRoomId) {
+      return;
+    }
+
+    const room = rooms.get(currentRoomId);
+    if (room) {
+      room.participants.delete(socket.id);
+      room.participantDetails.delete(socket.id);
+      room.lastActivity = Date.now();
+
+      socket.to(currentRoomId).emit('peer-disconnected', {
+        peerId: socket.id,
+      });
+
+      if (room.participants.size === 0) {
+        cleanup(currentRoomId);
+      }
+    }
+
+    socket.leave(currentRoomId);
+    socket.roomId = null;
+    socket.role = null;
+  });
+
   socket.on('webrtc-offer', (data) => {
     if (!enforceAbuseProtection(socket, clientIP, 'webrtc-offer', data)) {
       return;

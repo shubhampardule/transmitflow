@@ -251,6 +251,12 @@ class SignalingService {
     }
   }
 
+  leaveRoom(): void {
+    if (this.socket) {
+      this.socket.emit('leave-room');
+    }
+  }
+
   sendSignal(message: SignalingMessage): void {
     if (this.socket) {
       console.log('Sending signal:', message);
