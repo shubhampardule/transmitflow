@@ -38,9 +38,9 @@ describe('file-utils', () => {
   });
 
   describe('generateRoomCode', () => {
-    it('generates a code of length 8', () => {
+    it('generates a code of length 4', () => {
       const code = generateRoomCode();
-      expect(code).toHaveLength(8);
+      expect(code).toHaveLength(4);
     });
 
     it('generates a string from allowed charset', () => {
