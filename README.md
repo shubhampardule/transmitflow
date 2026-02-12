@@ -381,7 +381,7 @@ NODE_ENV=production
 | **Log Hygiene** | Sensitive context suppressed in production builds |
 | **SHA-256 Verification** | File integrity check after every transfer |
 
-All 17 hardening steps from our [Security Hardening Plan](SECURITY_HARDENING_PLAN.md) are completed. See [SECURITY.md](SECURITY.md) for our vulnerability reporting policy.
+Security hardening work is complete. See [SECURITY.md](SECURITY.md) for our vulnerability reporting policy.
 
 ## Troubleshooting
 
