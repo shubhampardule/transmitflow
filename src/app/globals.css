@@ -3,46 +3,46 @@
 @tailwind utilities;
 
 :root {
-  --radius: 0.625rem;
-  --background: 0 0% 100%;
-  --foreground: 0 0% 3.9%;
+  --radius: 0.75rem;
+  --background: 220 20% 98%;
+  --foreground: 224 71% 4%;
   --card: 0 0% 100%;
-  --card-foreground: 0 0% 3.9%;
+  --card-foreground: 224 71% 4%;
   --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 3.9%;
-  --primary: 0 0% 9%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 0 0% 96.1%;
-  --secondary-foreground: 0 0% 9%;
-  --muted: 0 0% 96.1%;
-  --muted-foreground: 0 0% 45.1%;
-  --accent: 0 0% 96.1%;
-  --accent-foreground: 0 0% 9%;
-  --destructive: 0 84.2% 60.2%;
-  --border: 0 0% 89.8%;
-  --input: 0 0% 89.8%;
-  --ring: 0 0% 3.9%;
+  --popover-foreground: 224 71% 4%;
+  --primary: 243 75% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 14% 96%;
+  --secondary-foreground: 220 9% 46%;
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 9% 46%;
+  --accent: 243 75% 59%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 243 75% 59%;
 }
 
 .dark {
-  --background: 0 0% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 0 0% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 0 0% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 0 0% 9%;
-  --secondary: 0 0% 14.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 0 0% 14.9%;
-  --muted-foreground: 0 0% 63.9%;
-  --accent: 0 0% 14.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --border: 0 0% 14.9%;
-  --input: 0 0% 14.9%;
-  --ring: 0 0% 83.1%;
+  --background: 224 71% 4%;
+  --foreground: 210 20% 98%;
+  --card: 224 50% 7%;
+  --card-foreground: 210 20% 98%;
+  --popover: 224 50% 7%;
+  --popover-foreground: 210 20% 98%;
+  --primary: 243 75% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 224 40% 13%;
+  --secondary-foreground: 210 20% 98%;
+  --muted: 224 40% 13%;
+  --muted-foreground: 220 9% 58%;
+  --accent: 243 75% 59%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 63% 31%;
+  --border: 224 30% 14%;
+  --input: 224 30% 14%;
+  --ring: 243 75% 59%;
 }
 
 /* Disable default crossfade so only the circle animation plays */
@@ -57,6 +57,52 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
+}
+
+/* ─── Gradient text ─── */
+@layer utilities {
+  .text-gradient {
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    background-image: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+  }
+}
+
+/* ─── Dot grid pattern ─── */
+.dot-pattern {
+  background-image: radial-gradient(hsl(var(--foreground) / 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.dark .dot-pattern {
+  background-image: radial-gradient(hsl(var(--foreground) / 0.04) 1px, transparent 1px);
+}
+
+/* ─── Background blobs ─── */
+@keyframes blob-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -40px) scale(1.03); }
+  50% { transform: translate(-15px, 20px) scale(0.97); }
+  75% { transform: translate(20px, 15px) scale(1.02); }
+}
+.blob {
+  animation: blob-drift 25s ease-in-out infinite;
+  border-radius: 50%;
+  filter: blur(90px);
+  position: absolute;
+  pointer-events: none;
+}
+.blob-1 { animation-delay: 0s; }
+.blob-2 { animation-delay: -8s; }
+.blob-3 { animation-delay: -16s; }
+
+/* ─── Glow pulse (active transfers) ─── */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.3; }
+}
+.animate-glow-pulse {
+  animation: glow-pulse 2.5s ease-in-out infinite;
 }

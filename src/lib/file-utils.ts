@@ -16,7 +16,7 @@ export const formatFileSize = (bytes: number): string => {
 };
 
 const ROOM_CODE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-const ROOM_CODE_LENGTH = 8;
+const ROOM_CODE_LENGTH = 4;
 const MAX_UNBIASED_BYTE_FOR_ROOM_CODE =
   Math.floor(256 / ROOM_CODE_CHARSET.length) * ROOM_CODE_CHARSET.length;
 

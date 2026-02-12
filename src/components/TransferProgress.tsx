@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { 
@@ -202,54 +201,49 @@ export default function TransferProgress({
       <div className="space-y-6">
       {/* Room Code - Only show during initial connection phase */}
       {(transferState.status === 'idle' || transferState.status === 'connecting') && (
-        <Card>
-          <CardContent className="py-4">
+        <div className="rounded-xl border border-border p-4">
             <div className="flex items-center justify-between h-12">
               <div className="flex flex-col justify-center h-full">
-                <h3 className="font-medium">Room Code</h3>
-                <p className="text-2xl font-mono font-bold tracking-wider">{roomCode}</p>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Room Code</h3>
+                <p className="text-2xl font-mono font-bold tracking-[0.3em]">{roomCode}</p>
               </div>
               <div className="flex gap-2 flex-wrap">
-                <Button onClick={copyRoomCode} variant="outline" size="sm">
+                <Button onClick={copyRoomCode} variant="outline" size="sm" className="rounded-lg">
                   <Copy className="h-4 w-4 mr-2" />
-                  Copy Code
+                  Copy
                 </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </div>
       )}
 
       {/* QR Code - ONLY show for senders during initial connection phase, NEVER for receivers */}
       {!isReceiver && role === 'send' && qrCodeUrl && (transferState.status === 'idle' || transferState.status === 'connecting') && (
-        <Card>
-          <CardContent className="pt-6">
+        <div className="rounded-xl border border-border p-6">
             <div className="flex flex-col items-center space-y-4">
-              <h3 className="font-medium">QR Code</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">QR Code</h3>
               <div className="flex flex-col items-center space-y-4">
                 <Image 
                   src={qrCodeUrl} 
                   alt="QR Code for sharing" 
                   width={200}
                   height={200}
-                  className="border rounded-lg"
+                  className="rounded-xl border border-border"
                 />
                 <p className="text-sm text-muted-foreground text-center">
                   Scan with receiver&apos;s device to connect
                 </p>
-                <Button onClick={copyShareLink} variant="outline" size="sm" className="w-full sm:w-auto">
+                <Button onClick={copyShareLink} variant="outline" size="sm" className="w-full sm:w-auto rounded-lg">
                   <Copy className="h-4 w-4 mr-2" />
                   Copy Share Link
                 </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </div>
       )}
 
       {/* Status */}
-      <Card>
-        <CardContent className="py-4">
+      <div className="rounded-xl border border-border p-4">
           <div className="flex items-center gap-4 h-12">
             {statusInfo.icon}
             <div className="flex-1 flex flex-col justify-center h-full">
@@ -257,21 +251,18 @@ export default function TransferProgress({
               <p className="text-muted-foreground">{statusInfo.description}</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </div>
 
       {/* File Transfer Queue */}
       {transferState.files.length > 0 && (
-        <Card data-transfer-card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>File Transfer</span>
-              <Badge variant="secondary">
-                {transferState.files.length} files
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div data-transfer-card className="rounded-xl border border-border">
+          <div className="flex items-center justify-between p-4 border-b border-border">
+            <span className="font-semibold">File Transfer</span>
+            <Badge variant="secondary">
+              {transferState.files.length} files
+            </Badge>
+          </div>
+          <div className="p-4">
             <div className="space-y-3">
               {transferState.files.map((file, index) => {
                 const progress = transferState.progress.find(p => p.fileIndex === index);
@@ -290,7 +281,7 @@ export default function TransferProgress({
                 const cancelButtonTitle = isActiveFile ? 'Cancel file transfer' : 'Remove from queue';
                 
                 return (
-                  <div key={index} data-file-item className="border rounded-lg p-4 space-y-3">
+                    <div key={index} data-file-item className="border border-border rounded-xl p-4 space-y-3">
                     {/* File Info Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -416,43 +407,41 @@ export default function TransferProgress({
                 );
               })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Action Buttons - Always visible */}
-      <Card>
-        <CardContent className="py-4">
+      <div className="rounded-xl border border-border p-4">
           <div className="flex gap-3">
             {hasError ? (
-              <Button onClick={onReset} variant="outline" className="flex-1">
+              <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Main
               </Button>
             ) : transferState.status === 'connecting' ? (
-              <Button onClick={onReset} variant="outline" className="flex-1">
+              <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Cancel & Go Back
               </Button>
             ) : isTransferring ? (
-              <Button onClick={onCancel} variant="outline" className="flex-1">
+              <Button onClick={onCancel} variant="outline" className="flex-1 rounded-xl">
                 <X className="h-4 w-4 mr-2" />
                 Cancel Transfer
               </Button>
             ) : isReceiver ? (
-              <Button onClick={onReset} variant="outline" className="flex-1">
+              <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Menu
               </Button>
             ) : (
-              <Button onClick={onReset} variant="outline" className="flex-1">
+              <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
                 <RotateCcw className="h-4 w-4 mr-2" />
                 New Transfer
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
+      </div>
       </div>
     </>
   );

@@ -1,10 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Download, Shield, Globe, Lock, ArrowLeftRight, Rocket, Users, Coffee } from 'lucide-react';
+import { Upload, Download, Shield, Globe, Lock, ArrowLeftRight, Rocket, Users, Coffee, Heart } from 'lucide-react';
 import { toast } from 'sonner';
 import TransmitFlowLogo from './ui/TransmitFlowLogo';
 
@@ -86,13 +84,15 @@ const toUserFriendlyCancelMessage = (
 
 export default function P2PFileTransfer() {
   console.log('=== P2PFileTransfer COMPONENT RENDERING ===');
-  
-  const searchParams = useSearchParams();
-  const receiveCode = searchParams.get('receive');
-  console.log('Next.js searchParams receive:', receiveCode);
-  
+
   const [isConnected, setIsConnected] = useState(false);
-  const [activeTab, setActiveTab] = useState<'send' | 'receive'>(receiveCode ? 'receive' : 'send');
+  const [activeTab, setActiveTab] = useState<'send' | 'receive'>(() => {
+    if (typeof window === 'undefined') {
+      return 'send';
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('receive') ? 'receive' : 'send';
+  });
   console.log('Current activeTab in render:', activeTab);
   const [transferState, setTransferState] = useState<TransferState>({
     status: 'idle',
@@ -637,7 +637,7 @@ export default function P2PFileTransfer() {
     let timeoutId: NodeJS.Timeout | undefined;
     
     if (transferState.status === 'connecting' && transferSessionActiveRef.current && !transferFinalizedRef.current) {
-      // Set a 30-second timeout for connection attempts
+      // Allow more time for slow devices / networks to establish signaling + WebRTC.
       timeoutId = setTimeout(() => {
         if (
           transferStatusRef.current !== 'connecting' ||
@@ -648,9 +648,9 @@ export default function P2PFileTransfer() {
         }
 
         console.log('Connection timeout reached');
-        const message = 'Connection timed out. Check the room code and try again.';
+        const message = 'Connection timed out. On slow networks this can take up to 2 minutes — try again or re-check the code.';
         finalizeTransfer('error', message, message);
-      }, 30000); // 30 seconds
+      }, 120000); // 2 minutes
     }
     
     return () => {
@@ -816,276 +816,249 @@ export default function P2PFileTransfer() {
   }, [handleReset]);
 
   return (
-    <div className="min-h-screen w-full relative transition-all duration-500 ease-in-out">
-      {/* Radial Gradient Background from Bottom */}
-      <div
-        className="absolute inset-0 z-0 transition-opacity duration-500 ease-in-out"
-        style={{
-          background: "radial-gradient(125% 125% at 50% 90%, #fff 40%, #6366f1 100%)",
-        }}
-      />
-      {/* Dark mode background - Ocean Night */}
-      <div 
-        className="absolute inset-0 z-0 dark:block hidden transition-opacity duration-500 ease-in-out"
-        style={{
-          background: `
-            linear-gradient(135deg, 
-              #0c1445 0%, 
-              #1e1b4b 25%, 
-              #312e81 50%, 
-              #1e1b4b 75%, 
-              #0c1445 100%
-            )
-          `,
-        }}
-      />
-      
-      {/* Subtle animated stars/particles for dark mode */}
-      <div
-        className="absolute inset-0 z-0 dark:block hidden opacity-30 transition-opacity duration-500 ease-in-out"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.3) 0%, transparent 50%),
-            radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.2) 0%, transparent 50%),
-            radial-gradient(circle at 40% 80%, rgba(59, 130, 246, 0.2) 0%, transparent 50%),
-            radial-gradient(circle at 90% 90%, rgba(168, 85, 247, 0.2) 0%, transparent 50%)
-          `,
-        }}
-      />
-      
-      {/* Theme Toggle - Desktop only */}
-      <div className="absolute top-6 right-6 z-20 hidden md:block">
-        <ThemeToggle />
+    <div className="relative min-h-screen w-full overflow-hidden bg-background">
+      {/* Background layers */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="blob blob-1 absolute -top-48 -right-48 h-[600px] w-[600px] bg-indigo-400/15 dark:bg-indigo-600/8" />
+        <div className="blob blob-2 absolute top-1/2 -left-48 h-[500px] w-[500px] bg-purple-400/10 dark:bg-purple-600/5" />
+        <div className="blob blob-3 absolute -bottom-32 right-1/4 h-[450px] w-[450px] bg-pink-400/8 dark:bg-pink-600/4" />
+        <div className="absolute inset-0 dot-pattern" />
       </div>
-      
-      {/* Your Content/Components */}
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-start md:justify-center p-6 pt-8 md:pt-6 transition-all duration-500 ease-in-out">
-        <Card className="w-full max-w-2xl bg-background/80 backdrop-blur-xl border-white/20 shadow-2xl dark:bg-gray-800/80 dark:border-gray-700/50 transition-all duration-500 ease-in-out relative">
-          {/* Theme Toggle - Mobile only, inside card */}
-          <div className="absolute top-4 right-4 z-30 md:hidden">
+
+      {/* Navbar */}
+      <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-6">
+          <div className="flex items-center gap-2.5">
+            <TransmitFlowLogo size={28} />
+            <span className="text-lg font-bold tracking-tight">
+              Transmit<span className="text-gradient">Flow</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <a href="https://github.com/shubhampardule/transmitflow" target="_blank" rel="noopener noreferrer" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" title="GitHub">
+              <svg className="h-[18px] w-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            </a>
             <ThemeToggle />
           </div>
-          
-          <CardHeader className="text-center">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <TransmitFlowLogo size={48} />
-            </div>
-            
-            <CardTitle className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent leading-tight pb-2 dark:from-blue-300 dark:to-purple-300 transition-all duration-500 ease-in-out">
-              TransmitFlow
-            </CardTitle>
-            <CardDescription className="text-lg text-muted-foreground dark:text-gray-300 transition-colors duration-500 ease-in-out">
-              Seamless file transmission
-            </CardDescription>
-          </CardHeader>
+        </div>
+      </header>
 
-          <CardContent>
-            {transferState.status === 'idle' ? (
-              <>
-                <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'send' | 'receive')} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="send" className="flex items-center gap-2 transition-all duration-200 ease-in-out">
-                    <Upload className="h-4 w-4" />
-                    Send Files
-                  </TabsTrigger>
-                  <TabsTrigger value="receive" className="flex items-center gap-2 transition-all duration-200 ease-in-out">
-                    <Download className="h-4 w-4" />
-                    Receive Files
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="send" className="mt-6 transition-all duration-300 ease-in-out">
-                  <SendFilesPanel
-                    onSendFiles={handleSendFiles}
-                    disabled={!isConnected}
-                    roomCode={roomCode}
-                  />
-                </TabsContent>
-
-                <TabsContent value="receive" className="mt-6 transition-all duration-300 ease-in-out">
-                  <ReceiveFilesPanel
-                    onReceiveFiles={handleReceiveFiles}
-                    disabled={!isConnected}
-                  />
-                </TabsContent>
-              </Tabs>
-              </>
-            ) : (
-              <TransferProgress
-                transferState={transferState}
-                roomCode={roomCode}
-                receivedFiles={receivedFiles}
-                onCancel={handleCancelTransfer}
-                onReset={handleReset}
-                onCancelFile={handleCancelFile}
-                role={activeTab}
-              />
-            )}
-          </CardContent>
-        </Card>
-        
-        {/* Features Section - Only show when idle */}
-        {transferState.status === 'idle' && (
+      <main className="mx-auto w-full max-w-6xl px-4 md:px-6 pb-16">
+        {transferState.status === 'idle' ? (
           <>
-            {/* Features Section */}
-            <div className="mt-12 w-full max-w-4xl">
-              {/* Features Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-                {/* True Peer-to-Peer */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/50 transition-all duration-500 ease-in-out">
-                      <ArrowLeftRight className="h-6 w-6 text-blue-600 dark:text-blue-400 transition-colors duration-500 ease-in-out" />
+            {/* ─── SPLIT HERO ─── */}
+            <section className="pt-12 md:pt-20 lg:pt-28 pb-16 lg:pb-24">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+                {/* Card — first on mobile, second on desktop */}
+                <div className="lg:order-2 w-full max-w-lg mx-auto lg:mx-0 lg:ml-auto">
+                  <div className="relative">
+                    <div className="absolute -inset-4 rounded-3xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-[0.12] blur-2xl dark:opacity-[0.08]" />
+                    <div className="relative rounded-2xl border border-border bg-card/90 backdrop-blur-sm shadow-2xl shadow-indigo-500/[0.04] p-1">
+                      <div className="rounded-xl bg-card p-5 md:p-7">
+                        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'send' | 'receive')} className="w-full">
+                          <TabsList className="grid w-full grid-cols-2 h-11 rounded-lg bg-muted p-1">
+                            <TabsTrigger value="send" className="flex items-center gap-2 rounded-md text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                              <Upload className="h-4 w-4" />
+                              Send
+                            </TabsTrigger>
+                            <TabsTrigger value="receive" className="flex items-center gap-2 rounded-md text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                              <Download className="h-4 w-4" />
+                              Receive
+                            </TabsTrigger>
+                          </TabsList>
+                          <TabsContent value="send" className="mt-6">
+                            <SendFilesPanel onSendFiles={handleSendFiles} disabled={!isConnected} roomCode={roomCode} />
+                          </TabsContent>
+                          <TabsContent value="receive" className="mt-6">
+                            <ReceiveFilesPanel onReceiveFiles={handleReceiveFiles} disabled={!isConnected} />
+                          </TabsContent>
+                        </Tabs>
+                      </div>
                     </div>
-                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">True Peer-to-Peer</h3>
                   </div>
-                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
-                    Files sent directly device-to-device using WebRTC. No cloud, no intermediaries.
-                  </p>
                 </div>
 
-                {/* Absolute Privacy */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/50 transition-all duration-500 ease-in-out">
-                      <Lock className="h-6 w-6 text-green-600 dark:text-green-400 transition-colors duration-500 ease-in-out" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Absolute Privacy</h3>
+                {/* Hero text — second on mobile, first on desktop */}
+                <div className="lg:order-1 text-center lg:text-left">
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 dark:border-indigo-500/20 bg-indigo-50 dark:bg-indigo-500/10 px-3.5 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                    <Lock className="h-3 w-3" />
+                    End-to-end encrypted
                   </div>
-                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
-                    Your files never touch our servers. We don&apos;t see, store, or track them.
+                  <h1 className="mt-6 text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.05]">
+                    Drop. Share.{' '}
+                    <br className="hidden sm:block" />
+                    <span className="text-gradient">Done.</span>
+                  </h1>
+                  <p className="mt-6 max-w-md text-lg text-muted-foreground leading-relaxed mx-auto lg:mx-0">
+                    Transfer files peer-to-peer with WebRTC. No cloud uploads, no accounts, no file size limits.
                   </p>
-                </div>
-
-                {/* Secure & Encrypted */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/50 transition-all duration-500 ease-in-out">
-                      <Shield className="h-6 w-6 text-red-600 dark:text-red-400 transition-colors duration-500 ease-in-out" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Secure & Encrypted</h3>
+                  <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 justify-center lg:justify-start text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><Shield className="h-4 w-4 text-indigo-500" /> DTLS encrypted</span>
+                    <span className="flex items-center gap-1.5"><Rocket className="h-4 w-4 text-purple-500" /> No size limits</span>
+                    <span className="flex items-center gap-1.5"><Globe className="h-4 w-4 text-pink-500" /> Any browser</span>
                   </div>
-                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
-                    Secure connections with isolated rooms for end-to-end protection.
-                  </p>
-                </div>
-
-                {/* Limitless High-Speed */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 transition-all duration-500 ease-in-out">
-                      <Rocket className="h-6 w-6 text-indigo-600 dark:text-indigo-400 transition-colors duration-500 ease-in-out" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Limitless High-Speed</h3>
-                  </div>
-                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
-                    Transfer files of any size with smart chunking to maximize network speed.
-                  </p>
-                </div>
-
-                {/* Universal Compatibility */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/50 transition-all duration-500 ease-in-out">
-                      <Globe className="h-6 w-6 text-purple-600 dark:text-purple-400 transition-colors duration-500 ease-in-out" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Universal Compatibility</h3>
-                  </div>
-                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
-                    Works instantly in any modern browser on any platform. No app required.
-                  </p>
-                </div>
-
-                {/* Open & Community Driven */}
-                <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-white/50 dark:bg-gray-800/90 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-900/50 transition-all duration-500 ease-in-out">
-                      <Users className="h-6 w-6 text-teal-600 dark:text-teal-400 transition-colors duration-500 ease-in-out" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Open & Community Driven</h3>
-                  </div>
-                  <p className="text-black/70 text-sm dark:text-gray-300 transition-colors duration-500 ease-in-out">
-                    Fully open-source for transparency. Help us improve on{' '}
-                    <a 
-                      href="https://github.com/shubhampardule/transmitflow" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-teal-600 hover:text-teal-700 font-medium dark:text-teal-400 dark:hover:text-teal-300 transition-colors duration-300 ease-in-out"
-                    >
-                      GitHub
-                    </a>.
-                  </p>
                 </div>
               </div>
+            </section>
 
-              {/* Support Section */}
-              <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-6 border border-white/50 text-center dark:bg-gradient-to-r dark:from-orange-500/30 dark:to-yellow-500/30 dark:border-gray-700/50 transition-all duration-500 ease-in-out">
-                <div className="flex items-center justify-center gap-2 mb-3">
-                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/50 transition-all duration-500 ease-in-out">
-                    <Users className="h-6 w-6 text-orange-600 dark:text-orange-400 transition-colors duration-500 ease-in-out" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-black/90 dark:text-white/90 transition-colors duration-500 ease-in-out">Support Our Work</h3>
-                </div>
-                <p className="text-black/70 mb-4 dark:text-gray-300 transition-colors duration-500 ease-in-out">
-                  Love using TransmitFlow? Help us keep it free and running smoothly!
-                </p>
-                <a
-                  href="https://buymeacoffee.com/shubhampardule"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 ease-in-out"
-                >
-                  <Coffee className="h-5 w-5" />
-                  Buy Me a Coffee
-                </a>
+            {/* ─── HOW IT WORKS ─── */}
+            <section className="py-20 border-t border-border/40">
+              <div className="text-center mb-14">
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">How it works</span>
+                <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Three simple steps</h2>
               </div>
-            </div>
+              <div className="relative grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-8 max-w-3xl mx-auto">
+                <div className="hidden md:block pointer-events-none absolute top-8 left-[calc(16.666%+2rem)] right-[calc(16.666%+2rem)] h-px bg-gradient-to-r from-indigo-500/30 via-purple-500/30 to-pink-500/30" />
+                {[
+                  { num: '01', title: 'Choose files', desc: 'Drop files or click to browse. Any file type, any size.' },
+                  { num: '02', title: 'Share the code', desc: 'Send the room code or QR to the receiver.' },
+                  { num: '03', title: 'Direct transfer', desc: 'Files flow peer-to-peer. Encrypted, fast, no cloud.' },
+                ].map((step) => (
+                  <div key={step.num} className="relative text-center">
+                    <div className="relative z-10 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white text-lg font-bold shadow-lg shadow-indigo-500/25 mb-5">
+                      {step.num}
+                    </div>
+                    <h3 className="font-semibold text-lg">{step.title}</h3>
+                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-[220px] mx-auto">{step.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* ─── BENTO FEATURES ─── */}
+            <section className="py-20 border-t border-border/40">
+              <div className="text-center mb-14">
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Features</span>
+                <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
+                  Why <span className="text-gradient">TransmitFlow</span>?
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[minmax(180px,auto)]">
+                {/* Hero card: P2P */}
+                <div className="md:col-span-2 lg:col-span-2 lg:row-span-2 rounded-2xl border border-border bg-card p-8 flex flex-col justify-between transition-all duration-200 hover:shadow-xl hover:shadow-indigo-500/[0.04]">
+                  <div>
+                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-500/15">
+                      <ArrowLeftRight className="h-6 w-6 text-indigo-500" />
+                    </div>
+                    <h3 className="mt-5 text-2xl font-bold">True Peer-to-Peer</h3>
+                    <p className="mt-3 text-muted-foreground text-lg leading-relaxed max-w-lg">
+                      Files travel directly between devices using WebRTC data channels. No cloud relay, no servers touching your data — as direct as handing someone a USB drive, but over the internet.
+                    </p>
+                  </div>
+                  <p className="mt-6 text-xs text-muted-foreground/60 font-medium uppercase tracking-wider">Powered by WebRTC Data Channels</p>
+                </div>
+                {/* Privacy */}
+                <div className="rounded-2xl border border-border bg-card p-6 flex flex-col transition-all duration-200 hover:shadow-lg hover:shadow-violet-500/[0.04]">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 dark:bg-violet-500/15">
+                    <Lock className="h-5 w-5 text-violet-500" />
+                  </div>
+                  <h3 className="mt-4 font-semibold text-lg">Total Privacy</h3>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">Your files never touch a server. We can&apos;t see, store, or track them.</p>
+                </div>
+                {/* Encrypted */}
+                <div className="rounded-2xl border border-border bg-card p-6 flex flex-col transition-all duration-200 hover:shadow-lg hover:shadow-rose-500/[0.04]">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 dark:bg-rose-500/15">
+                    <Shield className="h-5 w-5 text-rose-500" />
+                  </div>
+                  <h3 className="mt-4 font-semibold text-lg">Encrypted</h3>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">DTLS-secured connections with isolated room sessions.</p>
+                </div>
+                {/* Speed */}
+                <div className="rounded-2xl border border-border bg-card p-6 flex flex-col transition-all duration-200 hover:shadow-lg hover:shadow-amber-500/[0.04]">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-500/15">
+                    <Rocket className="h-5 w-5 text-amber-500" />
+                  </div>
+                  <h3 className="mt-4 font-semibold text-lg">No Limits</h3>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">Adaptive chunking for maximum throughput. Any file, any size.</p>
+                </div>
+                {/* Universal */}
+                <div className="rounded-2xl border border-border bg-card p-6 flex flex-col transition-all duration-200 hover:shadow-lg hover:shadow-emerald-500/[0.04]">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-500/15">
+                    <Globe className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <h3 className="mt-4 font-semibold text-lg">Works Everywhere</h3>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">Modern browser on any device. Zero installs needed.</p>
+                </div>
+                {/* Open Source */}
+                <div className="rounded-2xl border border-border bg-card p-6 flex flex-col transition-all duration-200 hover:shadow-lg hover:shadow-sky-500/[0.04]">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 dark:bg-sky-500/15">
+                    <Users className="h-5 w-5 text-sky-500" />
+                  </div>
+                  <h3 className="mt-4 font-semibold text-lg">Open Source</h3>
+                  <p className="mt-2 text-sm text-muted-foreground leading-relaxed">Fully transparent codebase. Audit, contribute, or fork anytime.</p>
+                </div>
+              </div>
+            </section>
+
+            {/* ─── SUPPORT CTA ─── */}
+            <section className="py-16">
+              <div className="relative overflow-hidden rounded-2xl">
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/[0.06] via-purple-500/[0.04] to-pink-500/[0.06]" />
+                <div className="relative px-6 py-12 md:px-12 text-center">
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-500/15 mb-5">
+                    <Coffee className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <h3 className="text-2xl font-bold">Enjoying TransmitFlow?</h3>
+                  <p className="mt-3 text-muted-foreground max-w-sm mx-auto">Help keep it free, open-source, and ad-free for everyone.</p>
+                  <a
+                    href="https://buymeacoffee.com/shubhampardule"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all hover:shadow-xl hover:shadow-indigo-500/35 hover:brightness-110"
+                  >
+                    <Heart className="h-4 w-4" />
+                    Support the Project
+                  </a>
+                </div>
+              </div>
+            </section>
           </>
+        ) : (
+          /* ─── TRANSFER ACTIVE ─── */
+          <section className="pt-8 pb-20">
+            <div className="max-w-2xl mx-auto">
+              <div className="relative">
+                <div className="absolute -inset-4 rounded-3xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 blur-2xl animate-glow-pulse" />
+                <div className="relative rounded-2xl border border-border bg-card/90 backdrop-blur-sm shadow-2xl p-1">
+                  <div className="rounded-xl bg-card p-5 md:p-7">
+                    <TransferProgress
+                      transferState={transferState}
+                      roomCode={roomCode}
+                      receivedFiles={receivedFiles}
+                      onCancel={handleCancelTransfer}
+                      onReset={handleReset}
+                      onCancelFile={handleCancelFile}
+                      role={activeTab}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         )}
-        
-        {/* Website Info */}
-        <div className="mt-6 w-full max-w-2xl text-center">
-          <div className="text-black/80 dark:text-white/80 transition-colors duration-500 ease-in-out">
-            <h3 className="text-lg font-semibold mb-2 transition-colors duration-500 ease-in-out">TransmitFlow</h3>
-            <p className="text-sm text-black/70 dark:text-gray-300 transition-colors duration-500 ease-in-out">
-              No servers, no limits, direct device-to-device transfer
-            </p>
-          </div>
-        </div>
-        
-        {/* Social Media Links - Outside the main card */}
-        <div className="mt-8 w-full max-w-2xl">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-black/80 dark:text-white/80">
-            <div className="text-sm">
-              Built with ❤️ for secure P2P file sharing
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-border/40 bg-background/50 backdrop-blur-sm mt-8">
+        <div className="mx-auto max-w-6xl px-4 md:px-6 py-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <TransmitFlowLogo size={20} />
+              <span className="text-sm font-semibold">TransmitFlow</span>
+              <span className="text-xs text-muted-foreground">— Direct device-to-device transfer</span>
             </div>
-            <div className="flex items-center gap-4">
-              <a
-                href="https://github.com/shubhampardule"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-black/60 hover:text-black transition-colors dark:text-white/60 dark:hover:text-white"
-                title="GitHub"
-              >
-                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-                </svg>
+            <div className="flex items-center gap-2">
+              <a href="https://github.com/shubhampardule/transmitflow" target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" title="GitHub">
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
               </a>
-              <a
-                href="https://x.com/ShubhamPardule"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-black/60 hover:text-black transition-colors dark:text-white/60 dark:hover:text-white"
-                title="X (Twitter)"
-              >
-                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                </svg>
+              <a href="https://x.com/ShubhamPardule" target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" title="X (Twitter)">
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
               </a>
             </div>
           </div>
+          <p className="mt-6 text-center text-xs text-muted-foreground">Built with ❤️ for the open web</p>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

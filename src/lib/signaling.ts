@@ -156,9 +156,11 @@ class SignalingService {
       
       console.log('Connecting to signaling server:', this.serverUrl);
 
+      const connectTimeoutMs = 120000;
+
       this.socket = io(this.serverUrl, {
         transports: ['polling', 'websocket'], // Try polling first, then websocket
-        timeout: 20000, // Increased timeout to 20 seconds
+        timeout: connectTimeoutMs,
         forceNew: true, // Force a new connection
         reconnection: true,
         reconnectionAttempts: 5,
@@ -211,9 +213,9 @@ class SignalingService {
       // Add a timeout fallback
       setTimeout(() => {
         if (this.socket && !this.socket.connected) {
-          reject(new Error('Connection timeout after 20 seconds'));
+          reject(new Error('Connection timeout after 2 minutes'));
         }
-      }, 20000);
+      }, connectTimeoutMs);
     });
   }
 
