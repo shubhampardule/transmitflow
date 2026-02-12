@@ -10,7 +10,7 @@ Harden TransmitFlow for production internet usage by implementing security contr
 
 ## Status
 - Overall: `In Progress`
-- Current step: `19`
+- Current step: `20`
 
 ## Step-by-Step Plan
 
@@ -255,7 +255,7 @@ Done when:
 - No regressions in connect/join/transfer flow.
 
 ### 19. Reduce friction in share flow (copy code/link + QR) (P2)
-Status: `Not Started`
+Status: `Completed`
 
 Scope:
 - Provide one-click actions for sharing: copy code, copy full link, and show QR.

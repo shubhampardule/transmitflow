@@ -4,7 +4,8 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Upload, FileText, Trash2, QrCode } from 'lucide-react';
+import { Upload, FileText, Trash2, QrCode, Copy, Link2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import QRCode from 'qrcode';
 
@@ -19,16 +20,67 @@ interface SendFilesPanelProps {
 export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: SendFilesPanelProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+  const [showQrCode, setShowQrCode] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getShareUrl = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    return `${window.location.origin}?receive=${roomCode}`;
+  }, [roomCode]);
+
+  const copyToClipboard = useCallback(async (value: string) => {
+    if (!value) {
+      throw new Error('Nothing to copy');
+    }
+
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }, []);
+
+  const handleCopyCode = useCallback(async () => {
+    try {
+      await copyToClipboard(roomCode);
+      toast.success('Code copied');
+    } catch (error) {
+      console.warn('Copy code failed:', error);
+      toast.error('Could not copy code');
+    }
+  }, [copyToClipboard, roomCode]);
+
+  const handleCopyLink = useCallback(async () => {
+    try {
+      const shareUrl = getShareUrl();
+      await copyToClipboard(shareUrl);
+      toast.success('Link copied');
+    } catch (error) {
+      console.warn('Copy link failed:', error);
+      toast.error('Could not copy link');
+    }
+  }, [copyToClipboard, getShareUrl]);
 
   // Generate QR code when room code changes
   useEffect(() => {
     let cancelled = false;
 
     if (roomCode) {
+      setShowQrCode(true);
       const generateQR = async () => {
         try {
-          const shareUrl = `${window.location.origin}?receive=${roomCode}`;
+          const shareUrl = getShareUrl();
           const qrDataUrl = await QRCode.toDataURL(shareUrl, {
             width: 256,
             margin: 2,
@@ -52,7 +104,7 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
     return () => {
       cancelled = true;
     };
-  }, [roomCode]);
+  }, [getShareUrl, roomCode]);
 
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -81,7 +133,7 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
     if (!roomCode) return;
     
     try {
-      const shareUrl = `${window.location.origin}?receive=${roomCode}`;
+      const shareUrl = getShareUrl();
       const qrDataUrl = await QRCode.toDataURL(shareUrl, {
         width: 256,
         margin: 2,
@@ -94,7 +146,7 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
     } catch (error) {
       console.error('Manual QR generation failed:', error);
     }
-  }, [roomCode]);
+  }, [getShareUrl, roomCode]);
 
   const handleSendFiles = useCallback(() => {
     if (selectedFiles.length > 0) {
@@ -128,18 +180,55 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
                 </div>
               </div>
 
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full rounded-lg"
+                  onClick={handleCopyCode}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy code
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full rounded-lg"
+                  onClick={handleCopyLink}
+                >
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Copy link
+                </Button>
+                {qrCodeUrl ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full rounded-lg"
+                    onClick={() => setShowQrCode((prev) => !prev)}
+                  >
+                    <QrCode className="h-4 w-4 mr-2" />
+                    {showQrCode ? 'Hide QR' : 'Show QR'}
+                  </Button>
+                ) : null}
+              </div>
+
               {qrCodeUrl ? (
-                <div className="flex justify-center">
-                  <div className="p-2 bg-white rounded-xl shadow-sm">
-                    <Image
-                      src={qrCodeUrl}
-                      alt="QR Code"
-                      width={200}
-                      height={200}
-                      className="rounded-lg"
-                    />
+                showQrCode ? (
+                  <div className="flex justify-center">
+                    <div className="p-2 bg-white rounded-xl shadow-sm">
+                      <Image
+                        src={qrCodeUrl}
+                        alt="QR Code"
+                        width={200}
+                        height={200}
+                        className="rounded-lg"
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : null
               ) : (
                 <Button onClick={generateQRCode} variant="outline" size="sm" className="w-full rounded-lg">
                   <QrCode className="h-4 w-4 mr-2" />
