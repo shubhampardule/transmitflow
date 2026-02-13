@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/favicon.svg" alt="TransmitFlow Logo" width="32" height="32" style="vertical-align:middle;"> TransmitFlow
+# <img src="public/favicon.svg" alt="TransmitFlow Logo" width="32" height="32" style="vertical-align:middle;"> TransmitFlow
 
 <div align="center">
 

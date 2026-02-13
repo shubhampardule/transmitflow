@@ -34,10 +34,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon.svg?v=2", type: "image/svg+xml" },
+      { url: "/favicon.svg?v=2", type: "image/svg+xml" },
     ],
-    shortcut: [{ url: "/icon.svg" }],
-    apple: [{ url: "/pwa-192.svg", type: "image/svg+xml" }],
+    shortcut: [{ url: "/favicon.svg?v=2" }],
+    apple: [{ url: "/pwa-192.svg?v=2", type: "image/svg+xml" }],
   },
 };
 

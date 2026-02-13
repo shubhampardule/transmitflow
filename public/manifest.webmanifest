@@ -11,13 +11,13 @@
   "categories": ["productivity", "utilities"],
   "icons": [
     {
-      "src": "/pwa-192.svg",
+      "src": "/pwa-192.svg?v=2",
       "sizes": "192x192",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     },
     {
-      "src": "/pwa-512.svg",
+      "src": "/pwa-512.svg?v=2",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"

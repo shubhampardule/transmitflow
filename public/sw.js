@@ -1,14 +1,15 @@
-const SHELL_CACHE = 'transmitflow-shell-v2';
-const RUNTIME_CACHE = 'transmitflow-runtime-v2';
+const SHELL_CACHE = 'transmitflow-shell-v3';
+const RUNTIME_CACHE = 'transmitflow-runtime-v3';
 const OFFLINE_URL = '/offline';
 const SENSITIVE_NAVIGATION_QUERY_KEYS = new Set(['receive', 'sharing']);
 const APP_SHELL = [
   '/',
   OFFLINE_URL,
   '/manifest.webmanifest',
-  '/favicon.ico',
-  '/pwa-192.svg',
-  '/pwa-512.svg',
+  '/favicon.svg?v=2',
+  '/icon.svg?v=2',
+  '/pwa-192.svg?v=2',
+  '/pwa-512.svg?v=2',
 ];
 
 function hasSensitiveNavigationQuery(url) {

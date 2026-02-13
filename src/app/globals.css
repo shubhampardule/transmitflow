@@ -64,9 +64,12 @@
 /* ─── Gradient text ─── */
 @layer utilities {
   .text-gradient {
+    display: inline-block;
     -webkit-background-clip: text;
     background-clip: text;
+    -webkit-text-fill-color: transparent;
     color: transparent;
+    padding-right: 0.04em;
     background-image: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
   }
 

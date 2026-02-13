@@ -12,9 +12,9 @@ export default function LandingNavbar({ signalingStatus }: LandingNavbarProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 md:px-6">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 shrink-0">
           <TransmitFlowLogo size={28} />
-          <span className="text-lg font-bold tracking-tight">
+          <span className="text-lg font-bold tracking-tight whitespace-nowrap">
             Transmit<span className="text-gradient">Flow</span>
           </span>
         </div>
