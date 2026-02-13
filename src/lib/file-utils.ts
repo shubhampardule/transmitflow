@@ -55,12 +55,9 @@ export const generateRoomCode = (): string => {
 };
 
 export const downloadFile = (file: File): void => {
-  console.log('downloadFile called with:', file.name, file.size, 'bytes');
-  
   try {
     // Create URL for the file
     const url = URL.createObjectURL(file);
-    console.log('Created object URL:', url);
     
     // Create download link
     const link = document.createElement('a');
@@ -75,8 +72,6 @@ export const downloadFile = (file: File): void => {
       return;
     }
     
-    console.log('Created download link - href:', link.href, 'download:', link.download);
-    
     // Style the link to be invisible but present
     link.style.position = 'fixed';
     link.style.top = '-1000px';
@@ -85,18 +80,15 @@ export const downloadFile = (file: File): void => {
     
     // Add to document
     document.body.appendChild(link);
-    console.log('Link added to document body');
     
     // Force the download
     if (typeof link.click === 'function') {
       link.click();
-      console.log('Link clicked successfully');
     } else {
       // Fallback for older browsers
       const event = document.createEvent('MouseEvents');
       event.initEvent('click', true, true);
       link.dispatchEvent(event);
-      console.log('Click event dispatched');
     }
     
     // Clean up after a delay
@@ -106,7 +98,6 @@ export const downloadFile = (file: File): void => {
           document.body.removeChild(link);
         }
         URL.revokeObjectURL(url);
-        console.log('Cleanup completed successfully');
       } catch (cleanupError) {
         console.warn('Cleanup error (non-critical):', cleanupError);
       }
@@ -119,9 +110,7 @@ export const downloadFile = (file: File): void => {
     try {
       const url = URL.createObjectURL(file);
       const newWindow = window.open(url, '_blank');
-      if (newWindow) {
-        console.log('Opened file in new window as fallback');
-      } else {
+      if (!newWindow) {
         console.error('Failed to open file - popup blocker may be active');
       }
     } catch (fallbackError) {

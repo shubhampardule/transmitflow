@@ -8,12 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Browser support matrix documentation (`docs/browser-support.md`).
+- Automated browser-support freshness validator script (`scripts/check-browser-support.mjs`).
+- Monthly CI workflow for browser-support verification (`.github/workflows/browser-support-check.yml`).
+- Privacy page at `/privacy` (`src/app/privacy/page.tsx`).
+- Landing section component split under `src/components/landing/`.
+- Transfer controller hook (`src/components/hooks/useP2PTransferController.ts`) for centralized transfer orchestration.
+- Transfer summary metrics card in terminal states (duration, average speed, size, file count).
+- Native share support (Web Share API with clipboard fallback) in sender and progress flows.
 - File-type aware icon mapping utility for transfer lists (`src/lib/file-icons.ts`).
 
 ### Changed
-- Versioning prepared for next incremental updates.
+- Main transfer container (`P2PFileTransfer`) simplified into a composition shell with hook-driven state.
+- README structure and architecture docs refreshed to match the refactored component/hook architecture.
+- CI pipeline now includes browser support matrix validation.
 - Drag-and-drop zone now shows clear active-state feedback during file hover.
-- File entries now render type-specific icons (image, video, audio, archive, code, spreadsheet, generic fallback).
+- File entries render type-specific icons (image, video, audio, archive, code, spreadsheet, generic fallback).
+
+### Fixed
+- Room-code receive input clipping and readability issues on small screens.
+- Removed obsolete floating scroll button mount and stale UI helper components.
 
 ## [0.2.0] - 2026-02-12
 

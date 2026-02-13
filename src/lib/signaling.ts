@@ -117,7 +117,6 @@ class SignalingService {
     return new Promise((resolve, reject) => {
       // If already connected, resolve with existing socket
       if (this.socket && this.socket.connected) {
-        console.log('Already connected to signaling server:', this.socket.id);
         resolve(this.socket);
         return;
       }
@@ -137,9 +136,6 @@ class SignalingService {
         const hostname = window.location.hostname;
         const protocol = window.location.protocol;
         
-        console.log('Detected hostname:', hostname);
-        console.log('Detected protocol:', protocol);
-        
         // Production configuration
         if (hostname.includes('vercel.app') || 
             hostname.includes('serverforminecraftbedrock.fun') || 
@@ -154,8 +150,6 @@ class SignalingService {
         }
       }
       
-      console.log('Connecting to signaling server:', this.serverUrl);
-
       const connectTimeoutMs = 120000;
 
       this.socket = io(this.serverUrl, {
@@ -179,10 +173,7 @@ class SignalingService {
             server.credential.length > 0,
         ).length;
 
-        console.log('Received ICE server configuration from signaling server:', {
-          totalServers: this.dynamicIceServers.length,
-          relayServers: relayServerCount,
-        });
+        void relayServerCount;
       });
 
       this.socket.on('turn-server-switch', (data: { server?: unknown; newIndex?: unknown }) => {
@@ -190,7 +181,6 @@ class SignalingService {
       });
 
       this.socket.on('connect', () => {
-        console.log('Connected to signaling server:', this.socket?.id);
         resolve(this.socket!);
       });
 
@@ -206,9 +196,7 @@ class SignalingService {
         reject(new Error(`Connection failed: ${errorMessage}`));
       });
 
-      this.socket.on('disconnect', (reason) => {
-        console.log('Disconnected from signaling server:', reason);
-      });
+      this.socket.on('disconnect', () => undefined);
 
       // Add a timeout fallback
       setTimeout(() => {
@@ -259,8 +247,6 @@ class SignalingService {
 
   sendSignal(message: SignalingMessage): void {
     if (this.socket) {
-      console.log('Sending signal:', message);
-      
       // Map the generic signal to specific server events
       switch (message.type) {
         case 'offer':
@@ -386,7 +372,6 @@ class SignalingService {
       this.removeSignalListeners();
 
       const offerListener = (data: { offer: RTCSessionDescriptionInit; from?: string }) => {
-        console.log('Received WebRTC offer:', data);
         callback({
           type: 'offer',
           payload: data.offer,
@@ -396,7 +381,6 @@ class SignalingService {
       };
 
       const answerListener = (data: { answer: RTCSessionDescriptionInit; from?: string }) => {
-        console.log('Received WebRTC answer:', data);
         callback({
           type: 'answer',
           payload: data.answer,
@@ -406,7 +390,6 @@ class SignalingService {
       };
 
       const iceListener = (data: { candidate: RTCIceCandidateInit; from?: string }) => {
-        console.log('Received WebRTC ICE candidate:', data);
         callback({
           type: 'ice',
           payload: data.candidate,

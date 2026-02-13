@@ -1,6 +1,5 @@
 
-import P2PFileTransfer from '@/components/P2PFileTransfer';
-import FloatingScrollButton from '@/components/FloatingScrollButton';
+import P2PFileTransfer from '../components/P2PFileTransfer';
 import { Toaster } from 'sonner';
 import { Analytics } from "@vercel/analytics/next";
 
@@ -12,9 +11,6 @@ export default function Home() {
         <P2PFileTransfer />
         <Toaster position="top-right" richColors />
       </div>
-      
-      {/* Floating Scroll Button - Outside all other UI elements */}
-      <FloatingScrollButton />
       
       {/* Vercel Analytics */}
       <Analytics />

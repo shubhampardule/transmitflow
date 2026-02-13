@@ -35,6 +35,9 @@ jobs:
     - name: Run Unit Tests
       run: npm test
 
+    - name: Check Browser Support Matrix
+      run: npm run check:browser-support
+
     - name: Build
       run: npm run build
       env:

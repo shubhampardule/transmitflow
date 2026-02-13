@@ -198,17 +198,20 @@ p2p-react/
 │   │
 │   ├── components/                # React components
 │   │   ├── ui/                    # shadcn/ui primitives (button, card, tabs, etc.)
-│   │   ├── P2PFileTransfer.tsx    # Main orchestrator (state machine, WebRTC lifecycle)
+│   │   ├── hooks/
+│   │   │   └── useP2PTransferController.ts # Transfer orchestration/state machine
+│   │   ├── landing/               # Landing page sections (navbar/hero/features/footer)
+│   │   ├── P2PFileTransfer.tsx    # Top-level composition shell
 │   │   ├── SendFilesPanel.tsx     # File selection, drag & drop, QR generation
 │   │   ├── ReceiveFilesPanel.tsx  # QR scanning, room code input, auto-connect
 │   │   ├── TransferProgress.tsx   # Real-time progress per file
-│   │   └── FloatingScrollButton.tsx
+│   │   └── ...
 │   │
 │   ├── lib/                       # Core logic
 │   │   ├── webrtc.ts              # WebRTC engine (chunking, backpressure, SHA-256)
 │   │   ├── signaling.ts           # Socket.IO client
 │   │   ├── chunk-store.ts         # IndexedDB chunk persistence
-│   │   ├── file-utils.ts          # File formatting, CSPRNG room codes
+│   │   ├── file-utils.ts          # File formatting, CSPRNG room codes (4-char)
 │   │   └── utils.ts               # Tailwind class merge
 │   │
 │   └── types/index.ts             # TypeScript interfaces
@@ -381,7 +384,7 @@ NODE_ENV=production
 | **Log Hygiene** | Sensitive context suppressed in production builds |
 | **SHA-256 Verification** | File integrity check after every transfer |
 
-Security hardening work is complete. See [SECURITY.md](SECURITY.md) for our vulnerability reporting policy.
+Security hardening work is complete. See [SECURITY.md](SECURITY.md) for our vulnerability reporting policy and the in-app [Privacy & Security page](/privacy).
 
 ## Troubleshooting
 

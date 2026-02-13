@@ -26,6 +26,8 @@ import { formatFileSize, formatTime, downloadFile } from '@/lib/file-utils';
 
 interface TransferProgressProps {
   transferState: TransferState;
+  transferStartedAt?: number | null;
+  transferEndedAt?: number | null;
   roomCode: string;
   receivedFiles: File[];
   onCancel: () => void;
@@ -39,6 +41,8 @@ interface TransferProgressProps {
 
 export default function TransferProgress({
   transferState,
+  transferStartedAt,
+  transferEndedAt,
   roomCode,
   receivedFiles,
   onCancel,
@@ -52,6 +56,23 @@ export default function TransferProgress({
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [showQrCode, setShowQrCode] = useState(true);
   const isReceiver = role === 'receive'; // Fix: Use role prop instead of receivedFiles.length
+
+  const isMobileShareSupported = () => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return false;
+    }
+
+    const hasNativeShare = typeof navigator.share === 'function';
+    if (!hasNativeShare) {
+      return false;
+    }
+
+    const hasCoarsePointer = typeof window.matchMedia === 'function'
+      && window.matchMedia('(pointer: coarse)').matches;
+    const isMobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+
+    return hasCoarsePointer || isMobileUserAgent;
+  };
   
   // Generate QR code when room code is available - ONLY for senders, never for receivers
   useEffect(() => {
@@ -103,6 +124,15 @@ export default function TransferProgress({
   const copyShareLink = async () => {
     const shareUrl = `${window.location.origin}${window.location.pathname}?receive=${roomCode}`;
     try {
+      if (isMobileShareSupported()) {
+        await navigator.share({
+          title: 'TransmitFlow',
+          text: `Join my room (${roomCode})`,
+          url: shareUrl,
+        });
+        return;
+      }
+
       // Try modern clipboard API first
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(shareUrl);
@@ -112,12 +142,17 @@ export default function TransferProgress({
         copyToClipboardFallback(shareUrl);
         toast.success('Link copied');
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
       // If clipboard API fails, use fallback
       copyToClipboardFallback(shareUrl);
       toast.success('Link copied');
     }
   };
+
+  const linkActionLabel = isMobileShareSupported() ? 'Share link' : 'Copy link';
 
   const copyToClipboardFallback = (text: string) => {
     // Create a temporary textarea element
@@ -259,6 +294,31 @@ export default function TransferProgress({
 
   const whatsHappeningText = getWhatsHappeningText();
 
+  const summaryTotalBytes = transferState.files.reduce((sum, file) => sum + file.size, 0);
+  const summaryTransferredBytes = transferState.progress.reduce((sum, progress) => {
+    if (progress.cancelled) {
+      return sum;
+    }
+    const bounded = Math.min(progress.bytesTransferred || 0, progress.totalBytes || 0);
+    return sum + bounded;
+  }, 0);
+  const summaryCancelledCount = transferState.progress.filter((progress) => progress.cancelled).length;
+  const summaryCompletedCount = transferState.files.length - summaryCancelledCount;
+
+  const summaryDurationSeconds = (
+    transferStartedAt && transferEndedAt && transferEndedAt > transferStartedAt
+      ? (transferEndedAt - transferStartedAt) / 1000
+      : null
+  );
+  const summaryAverageSpeed = (
+    summaryDurationSeconds && summaryDurationSeconds > 0
+      ? summaryTransferredBytes / summaryDurationSeconds
+      : null
+  );
+  const summaryIntegrityLabel = isComplete
+    ? 'No integrity mismatch reported'
+    : 'Not fully verified (transfer cancelled)';
+
   return (
     <>
       <div className="space-y-6">
@@ -297,7 +357,7 @@ export default function TransferProgress({
                     </Button>
                     <Button onClick={copyShareLink} variant="outline" size="sm" className="rounded-lg">
                       <Link2 className="h-4 w-4 mr-2" />
-                      Copy link
+                      {linkActionLabel}
                     </Button>
                     {!isReceiver && role === 'send' && qrCodeUrl ? (
                       <Button
@@ -352,7 +412,7 @@ export default function TransferProgress({
                     </Button>
                     <Button onClick={copyShareLink} variant="outline" size="sm" className="rounded-lg">
                       <Link2 className="h-4 w-4 mr-2" />
-                      Copy link
+                      {linkActionLabel}
                     </Button>
                   </div>
                 </div>
@@ -583,6 +643,43 @@ export default function TransferProgress({
           </div>
         </div>
       )}
+
+      {(isComplete || isCancelled) && transferState.files.length > 0 ? (
+        <div className="rounded-xl border border-border p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-semibold">Transfer Summary</h4>
+            <Badge variant={isComplete ? 'secondary' : 'outline'}>
+              {isComplete ? 'Completed' : 'Cancelled'}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
+              <div className="text-xs text-muted-foreground">Total size</div>
+              <div className="font-medium">{formatFileSize(summaryTotalBytes)}</div>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
+              <div className="text-xs text-muted-foreground">Elapsed time</div>
+              <div className="font-medium">{summaryDurationSeconds ? formatTime(summaryDurationSeconds) : '—'}</div>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
+              <div className="text-xs text-muted-foreground">Average speed</div>
+              <div className="font-medium">
+                {summaryAverageSpeed ? `${formatFileSize(summaryAverageSpeed)}/s` : '—'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
+              <div className="text-xs text-muted-foreground">Files</div>
+              <div className="font-medium">
+                {summaryCompletedCount}/{transferState.files.length} completed
+                {summaryCancelledCount > 0 ? `, ${summaryCancelledCount} cancelled` : ''}
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Integrity status: {summaryIntegrityLabel}
+          </p>
+        </div>
+      ) : null}
 
       {/* Action Buttons - Always visible */}
       <div className="rounded-xl border border-border p-4">

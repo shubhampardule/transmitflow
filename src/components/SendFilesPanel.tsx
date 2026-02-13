@@ -33,6 +33,23 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
     return `${window.location.origin}?receive=${roomCode}`;
   }, [roomCode]);
 
+  const isMobileShareSupported = useCallback(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return false;
+    }
+
+    const hasNativeShare = typeof navigator.share === 'function';
+    if (!hasNativeShare) {
+      return false;
+    }
+
+    const hasCoarsePointer = typeof window.matchMedia === 'function'
+      && window.matchMedia('(pointer: coarse)').matches;
+    const isMobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+
+    return hasCoarsePointer || isMobileUserAgent;
+  }, []);
+
   const copyToClipboard = useCallback(async (value: string) => {
     if (!value) {
       throw new Error('Nothing to copy');
@@ -67,13 +84,26 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
   const handleCopyLink = useCallback(async () => {
     try {
       const shareUrl = getShareUrl();
+
+      if (isMobileShareSupported()) {
+        await navigator.share({
+          title: 'TransmitFlow',
+          text: `Join my room (${roomCode})`,
+          url: shareUrl,
+        });
+        return;
+      }
+
       await copyToClipboard(shareUrl);
       toast.success('Link copied');
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
       console.warn('Copy link failed:', error);
       toast.error('Could not copy link');
     }
-  }, [copyToClipboard, getShareUrl]);
+  }, [copyToClipboard, getShareUrl, isMobileShareSupported, roomCode]);
 
   // Generate QR code when room code changes
   useEffect(() => {
@@ -256,7 +286,7 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
                   onClick={handleCopyLink}
                 >
                   <Link2 className="h-4 w-4 mr-2" />
-                  Copy link
+                  {isMobileShareSupported() ? 'Share link' : 'Copy link'}
                 </Button>
                 {qrCodeUrl ? (
                   <Button

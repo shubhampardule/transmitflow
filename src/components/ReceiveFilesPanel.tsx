@@ -329,8 +329,12 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
                   onChange={handleInputChange}
                   onCompositionStart={handleCompositionStart}
                   onCompositionEnd={handleCompositionEnd}
-                  placeholder="Enter 4-character code"
-                  className="text-center font-mono slashed-zero text-lg tracking-widest h-12 rounded-xl"
+                  placeholder="Enter 4-char code"
+                  className={`text-center font-mono slashed-zero h-12 rounded-xl ${
+                    roomCode
+                      ? 'text-lg tracking-[0.3em]'
+                      : 'text-sm md:text-base tracking-normal placeholder:tracking-normal placeholder:font-sans'
+                  }`}
                   maxLength={4}
                   autoCorrect="off"
                   spellCheck={false}
@@ -395,8 +399,12 @@ export default function ReceiveFilesPanel({ onReceiveFiles, disabled }: ReceiveF
                 onChange={handleInputChange}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
-                placeholder="Enter 4-character code"
-                className="text-center font-mono slashed-zero text-lg tracking-widest h-12 rounded-xl"
+                placeholder="Enter 4-char code"
+                className={`text-center font-mono slashed-zero h-12 rounded-xl ${
+                  roomCode
+                    ? 'text-lg tracking-[0.3em]'
+                    : 'text-sm md:text-base tracking-normal placeholder:tracking-normal placeholder:font-sans'
+                }`}
                 maxLength={4}
                 autoCorrect="off"
                 spellCheck={false}
