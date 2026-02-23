@@ -178,15 +178,50 @@ const ALLOW_INSECURE_PUBLIC_TURN_FALLBACK = /^(1|true|yes)$/i.test(
   process.env.ALLOW_INSECURE_PUBLIC_TURN_FALLBACK || '',
 );
 
-const configuredTurnUrls = readConfiguredUrlList('TURN_URLS', ['TURN_URL', 'NEXT_PUBLIC_TURN_URL']);
-const configuredTurnUsername = readConfiguredSecret('TURN_USERNAME', ['TURN_USER', 'NEXT_PUBLIC_TURN_USER']);
-const configuredTurnCredential = readConfiguredSecret('TURN_CREDENTIAL', ['TURN_PASS', 'TURN_PASSWORD', 'NEXT_PUBLIC_TURN_PASS']);
-const configuredStunUrls = readConfiguredUrlList('STUN_URLS', ['STUN_URL', 'NEXT_PUBLIC_STUN_URL']);
+const configuredTurnUrlsRaw = readConfiguredUrlList('TURN_URLS', ['TURN_URL']);
+const configuredTurnUrlsFiltered = filterIceUrlsByScheme(configuredTurnUrlsRaw, ['turn:', 'turns:']);
+const configuredTurnUrls = ensureFullTurnTransportCoverage(configuredTurnUrlsFiltered);
+const configuredTurnUsername = readConfiguredSecret('TURN_USERNAME', ['TURN_USER']);
+const configuredTurnCredential = readConfiguredSecret('TURN_CREDENTIAL', ['TURN_PASS', 'TURN_PASSWORD']);
+const configuredStunUrlsRaw = readConfiguredUrlList('STUN_URLS', ['STUN_URL', 'NEXT_PUBLIC_STUN_URL']);
+const configuredStunUrls = filterIceUrlsByScheme(configuredStunUrlsRaw, ['stun:']);
 const hasCustomTurnConfigured = (
   configuredTurnUrls.length > 0 &&
   configuredTurnUsername.length > 0 &&
   configuredTurnCredential.length > 0
 );
+const TRUSTED_PUBLIC_STUN_FALLBACK_URLS = [
+  'stun:stun.l.google.com:19302',
+  'stun:stun1.l.google.com:19302',
+  'stun:stun2.l.google.com:19302',
+];
+const hasPublicTurnEnvConfigured = [
+  'NEXT_PUBLIC_TURN_URLS',
+  'NEXT_PUBLIC_TURN_URL',
+  'NEXT_PUBLIC_TURN_USER',
+  'NEXT_PUBLIC_TURN_PASS',
+].some((envName) => {
+  const value = process.env[envName];
+  return typeof value === 'string' && value.trim().length > 0;
+});
+
+if (IS_PRODUCTION && hasPublicTurnEnvConfigured) {
+  logWarn(
+    '[SECURITY] NEXT_PUBLIC_TURN_* variables are set in production. TURN relay credentials must come from TURN_URLS/TURN_USERNAME/TURN_CREDENTIAL only.',
+  );
+}
+
+if (configuredTurnUrlsRaw.length > configuredTurnUrlsFiltered.length) {
+  logWarn('[SECURITY] Ignored non-TURN entries in TURN_URLS configuration.');
+}
+
+if (configuredStunUrlsRaw.length > configuredStunUrls.length) {
+  logWarn('[SECURITY] Ignored non-STUN entries in STUN_URLS configuration.');
+}
+
+if (configuredTurnUrls.length > configuredTurnUrlsFiltered.length) {
+  logWarn('[SECURITY] TURN_URLS was missing one or more transports; normalized to include UDP/TCP/TLS.');
+}
 
 if (configuredTurnUrls.length > 0 && !hasCustomTurnConfigured) {
   logWarn(
@@ -208,6 +243,7 @@ if (IS_PRODUCTION && ALLOW_INSECURE_PUBLIC_TURN_FALLBACK) {
 
 // Multiple TURN/STUN servers for better global coverage.
 // Security hardening: no shared public TURN credentials by default in production.
+// Priority order is deterministic: custom TURN -> custom STUN -> trusted public STUN fallback.
 const turnServers = [
   ...(hasCustomTurnConfigured ? [{
     urls: configuredTurnUrls,
@@ -223,19 +259,7 @@ const turnServers = [
 
   // Public STUN fallback remains acceptable because it does not expose relay credentials.
   {
-    urls: [
-      "stun:stun.l.google.com:19302",
-      "stun:stun1.l.google.com:19302",
-      "stun:stun2.l.google.com:19302"
-    ],
-    region: "global"
-  },
-  {
-    urls: [
-      "stun:stun.stunprotocol.org:3478",
-      "stun:stun.voiparound.com",
-      "stun:stun.voipbuster.com"
-    ],
+    urls: TRUSTED_PUBLIC_STUN_FALLBACK_URLS,
     region: "global"
   },
 
@@ -626,6 +650,122 @@ function readConfiguredUrlList(primaryName, fallbackNames = []) {
   }
 
   return [];
+}
+
+function filterIceUrlsByScheme(urls, allowedSchemes) {
+  if (!Array.isArray(urls) || !Array.isArray(allowedSchemes) || allowedSchemes.length === 0) {
+    return [];
+  }
+
+  return urls.filter((url) => {
+    if (typeof url !== 'string') {
+      return false;
+    }
+
+    const normalized = url.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    return allowedSchemes.some((scheme) => normalized.startsWith(scheme));
+  });
+}
+
+function inferTlsAuthorityFromTurnAuthority(turnAuthority) {
+  if (typeof turnAuthority !== 'string' || turnAuthority.length === 0) {
+    return null;
+  }
+
+  // IPv6 host with optional port, e.g. [2001:db8::1]:3478
+  if (/^\[[^\]]+\](?::\d+)?$/u.test(turnAuthority)) {
+    if (/:\d+$/u.test(turnAuthority)) {
+      return turnAuthority.replace(/:\d+$/u, ':5349');
+    }
+    return `${turnAuthority}:5349`;
+  }
+
+  // Hostname/IPv4 with optional port.
+  if (/:\d+$/u.test(turnAuthority)) {
+    return turnAuthority.replace(/:\d+$/u, ':5349');
+  }
+
+  return `${turnAuthority}:5349`;
+}
+
+function ensureFullTurnTransportCoverage(turnUrls) {
+  if (!Array.isArray(turnUrls) || turnUrls.length === 0) {
+    return [];
+  }
+
+  const normalizedUrls = Array.from(
+    new Set(
+      turnUrls
+        .filter((url) => typeof url === 'string')
+        .map((url) => url.trim())
+        .filter((url) => url.length > 0),
+    ),
+  );
+
+  const coverage = {
+    udp: false,
+    tcp: false,
+    tls: false,
+  };
+
+  let turnAuthority = null;
+  let turnsAuthority = null;
+
+  for (const url of normalizedUrls) {
+    const lowered = url.toLowerCase();
+    const match = lowered.match(/^(turns?):([^?]+)/u);
+    if (!match) {
+      continue;
+    }
+
+    const scheme = match[1];
+    const authority = match[2];
+
+    if (scheme === 'turns') {
+      coverage.tls = true;
+      if (!turnsAuthority) {
+        turnsAuthority = authority;
+      }
+      continue;
+    }
+
+    if (!turnAuthority) {
+      turnAuthority = authority;
+    }
+
+    if (lowered.includes('transport=tcp')) {
+      coverage.tcp = true;
+    } else {
+      // Default TURN transport is UDP when explicit transport is absent.
+      coverage.udp = true;
+    }
+  }
+
+  if (turnAuthority) {
+    if (!coverage.udp) {
+      normalizedUrls.push(`turn:${turnAuthority}?transport=udp`);
+      coverage.udp = true;
+    }
+
+    if (!coverage.tcp) {
+      normalizedUrls.push(`turn:${turnAuthority}?transport=tcp`);
+      coverage.tcp = true;
+    }
+  }
+
+  if (!coverage.tls) {
+    const tlsAuthority = turnsAuthority || inferTlsAuthorityFromTurnAuthority(turnAuthority);
+    if (tlsAuthority) {
+      normalizedUrls.push(`turns:${tlsAuthority}?transport=tcp`);
+      coverage.tls = true;
+    }
+  }
+
+  return Array.from(new Set(normalizedUrls));
 }
 
 function readConfiguredSecret(primaryName, fallbackNames = []) {
@@ -1028,9 +1168,9 @@ function createRoom(roomId) {
     connectionQuality: 'unknown',
     networkType: 'unknown', // wifi, cellular, unknown
     adaptiveSettings: {
-      chunkSize: 2048,
-      bufferSize: 16384,
-      delay: 100
+      chunkSize: 131072,  // 128KB
+      bufferSize: 1048576, // 1MB
+      delay: 0
     }
   };
   
@@ -1218,11 +1358,12 @@ io.on('connection', (socket) => {
           } else {
             logDebug(`Long-distance room detected: ${roomId} (estimated ${distance}km)`);
           }
-          // Optimize settings for long distance
+          // Use conservative-but-fast relay-safe defaults for long-distance routes.
+          // Previous values were too small and throttled throughput unnecessarily.
           room.adaptiveSettings = {
-            chunkSize: 1024,
-            bufferSize: 8192,
-            delay: 200
+            chunkSize: 65536,   // 64KB
+            bufferSize: 524288, // 512KB
+            delay: 5
           };
         }
       }
@@ -1547,19 +1688,35 @@ io.on('connection', (socket) => {
     const { room } = authorized;
     room.lastActivity = Date.now();
 
-    // Adapt settings based on transfer performance
+    // Adapt settings based on transfer performance.
+    // Goal: avoid over-throttling while still backing off on weak relay paths.
     if (payload.speed && room.isLongDistance) {
       const speedKBps = payload.speed / 1024;
+      let settingsChanged = false;
 
-      if (speedKBps < 10 && room.adaptiveSettings.chunkSize > 512) {
-        // Very slow - reduce chunk size further
-        room.adaptiveSettings.chunkSize = 512;
-        room.adaptiveSettings.delay = Math.min(500, room.adaptiveSettings.delay + 50);
+      if (speedKBps < 80 && room.adaptiveSettings.chunkSize > 32768) {
+        // Slow path: gradually reduce chunk size and add light pacing.
+        room.adaptiveSettings.chunkSize = Math.max(
+          32768,
+          Math.floor(room.adaptiveSettings.chunkSize / 2),
+        );
+        room.adaptiveSettings.delay = Math.min(40, (room.adaptiveSettings.delay || 0) + 5);
+        settingsChanged = true;
+      } else if (speedKBps > 1500 && room.adaptiveSettings.chunkSize < 131072) {
+        // Healthy path: scale chunk size back up and reduce pacing.
+        room.adaptiveSettings.chunkSize = Math.min(
+          131072,
+          room.adaptiveSettings.chunkSize * 2,
+        );
+        room.adaptiveSettings.delay = Math.max(0, (room.adaptiveSettings.delay || 0) - 2);
+        settingsChanged = true;
+      }
 
+      if (settingsChanged) {
         io.to(payload.roomId).emit('adaptive-settings-update', room.adaptiveSettings);
-        if (!IS_PRODUCTION) {
-          logDebug(`Adapted settings for slow transfer: ${speedKBps.toFixed(1)} KB/s`);
-        }
+        logDebug(
+          `Adaptive settings update: ${speedKBps.toFixed(1)} KB/s, chunk=${room.adaptiveSettings.chunkSize}, delay=${room.adaptiveSettings.delay}`,
+        );
       }
     }
 

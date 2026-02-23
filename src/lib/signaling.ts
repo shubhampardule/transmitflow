@@ -1,10 +1,18 @@
 import { io, Socket } from 'socket.io-client';
 import { SignalingMessage } from '@/types';
 
+export interface AdaptiveTransferSettings {
+  chunkSize: number;
+  bufferSize: number;
+  delay: number;
+}
+
 class SignalingService {
   private socket: Socket | null = null;
   private serverUrl: string = '';
   private dynamicIceServers: RTCIceServer[] = [];
+  private adaptiveSettings: AdaptiveTransferSettings | null = null;
+  private adaptiveSettingsListener: ((settings: AdaptiveTransferSettings) => void) | null = null;
   private signalListeners: {
     offer?: (data: { offer: RTCSessionDescriptionInit; from?: string }) => void;
     answer?: (data: { answer: RTCSessionDescriptionInit; from?: string }) => void;
@@ -113,6 +121,58 @@ class SignalingService {
     this.dynamicIceServers = [sanitized];
   }
 
+  private toBoundedInteger(rawValue: unknown, min: number, max: number): number | null {
+    if (typeof rawValue !== 'number' || !Number.isFinite(rawValue)) {
+      return null;
+    }
+
+    const normalized = Math.floor(rawValue);
+    if (normalized < min || normalized > max) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private sanitizeAdaptiveSettings(rawSettings: unknown): AdaptiveTransferSettings | null {
+    if (!rawSettings || typeof rawSettings !== 'object' || Array.isArray(rawSettings)) {
+      return null;
+    }
+
+    const candidate = rawSettings as {
+      chunkSize?: unknown;
+      bufferSize?: unknown;
+      delay?: unknown;
+    };
+
+    const chunkSize = this.toBoundedInteger(candidate.chunkSize, 16 * 1024, 512 * 1024);
+    const bufferSize = this.toBoundedInteger(candidate.bufferSize, 64 * 1024, 8 * 1024 * 1024);
+    const delay = this.toBoundedInteger(candidate.delay, 0, 1000);
+
+    if (chunkSize === null && bufferSize === null && delay === null) {
+      return null;
+    }
+
+    return {
+      chunkSize: chunkSize ?? this.adaptiveSettings?.chunkSize ?? (128 * 1024),
+      bufferSize: bufferSize ?? this.adaptiveSettings?.bufferSize ?? (1024 * 1024),
+      delay: delay ?? this.adaptiveSettings?.delay ?? 0,
+    };
+  }
+
+  private updateAdaptiveSettings(rawSettings: unknown): void {
+    const sanitized = this.sanitizeAdaptiveSettings(rawSettings);
+    if (!sanitized) {
+      return;
+    }
+
+    this.adaptiveSettings = sanitized;
+
+    if (this.adaptiveSettingsListener) {
+      this.adaptiveSettingsListener({ ...sanitized });
+    }
+  }
+
   connect(serverUrl?: string): Promise<Socket> {
     return new Promise((resolve, reject) => {
       // If already connected, resolve with existing socket
@@ -127,6 +187,7 @@ class SignalingService {
         this.socket.disconnect();
       }
       this.dynamicIceServers = [];
+      this.adaptiveSettings = null;
 
       // Determine the correct signaling server URL
       if (serverUrl) {
@@ -163,8 +224,9 @@ class SignalingService {
         rememberUpgrade: false, // Don't remember the upgrade
       });
 
-      this.socket.on('turn-servers', (data: { servers?: unknown }) => {
+      this.socket.on('turn-servers', (data: { servers?: unknown; adaptiveSettings?: unknown }) => {
         this.updateDynamicIceServers(data?.servers);
+        this.updateAdaptiveSettings(data?.adaptiveSettings);
         const relayServerCount = this.dynamicIceServers.filter(
           (server) =>
             typeof server.username === 'string' &&
@@ -178,6 +240,10 @@ class SignalingService {
 
       this.socket.on('turn-server-switch', (data: { server?: unknown; newIndex?: unknown }) => {
         this.upsertDynamicIceServer(data?.server, data?.newIndex);
+      });
+
+      this.socket.on('adaptive-settings-update', (data: unknown) => {
+        this.updateAdaptiveSettings(data);
       });
 
       this.socket.on('connect', () => {
@@ -218,6 +284,8 @@ class SignalingService {
       this.socket = null;
     }
     this.dynamicIceServers = [];
+    this.adaptiveSettings = null;
+    this.adaptiveSettingsListener = null;
   }
 
   joinRoom(
@@ -282,6 +350,34 @@ class SignalingService {
   emitTransferComplete(roomCode: string, totalBytes?: number): void {
     if (this.socket) {
       this.socket.emit('transfer-complete', { roomId: roomCode, totalBytes: totalBytes || 0 });
+    }
+  }
+
+  emitTransferProgress(
+    roomCode: string,
+    payload: {
+      fileIndex: number;
+      progress: number;
+      bytesTransferred: number;
+      totalBytes: number;
+      speed: number;
+      stage?: 'converting' | 'transferring';
+      conversionProgress?: number;
+    },
+  ): void {
+    if (this.socket) {
+      this.socket.emit('transfer-progress', {
+        roomId: roomCode,
+        fileIndex: payload.fileIndex,
+        progress: payload.progress,
+        bytesTransferred: payload.bytesTransferred,
+        totalBytes: payload.totalBytes,
+        speed: payload.speed,
+        stage: payload.stage || 'transferring',
+        ...(payload.conversionProgress !== undefined
+          ? { conversionProgress: payload.conversionProgress }
+          : {}),
+      });
     }
   }
 
@@ -367,6 +463,14 @@ class SignalingService {
     }
   }
 
+  onAdaptiveSettingsUpdate(callback: (settings: AdaptiveTransferSettings) => void): void {
+    this.adaptiveSettingsListener = callback;
+
+    if (this.adaptiveSettings) {
+      callback({ ...this.adaptiveSettings });
+    }
+  }
+
   onSignal(callback: (message: SignalingMessage) => void): void {
     if (this.socket) {
       this.removeSignalListeners();
@@ -430,6 +534,7 @@ class SignalingService {
       this.socket.off('transfer-cancelled');
       this.socket.off('turn-servers');
       this.socket.off('turn-server-switch');
+      this.socket.off('adaptive-settings-update');
     }
   }
 
@@ -438,6 +543,14 @@ class SignalingService {
       ...server,
       urls: Array.isArray(server.urls) ? [...server.urls] : server.urls,
     }));
+  }
+
+  getAdaptiveSettings(): AdaptiveTransferSettings | null {
+    if (!this.adaptiveSettings) {
+      return null;
+    }
+
+    return { ...this.adaptiveSettings };
   }
 
   get id(): string | null {

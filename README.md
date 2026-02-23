@@ -359,13 +359,16 @@ Create a `.env` file:
 # Signaling server URL
 NEXT_PUBLIC_SIGNALING_SERVER_URL=https://your-signaling-server.com
 
-# WebRTC ICE configuration (optional — has sensible defaults)
-NEXT_PUBLIC_TURN_URLS=turn:your-turn-server.com:3478?transport=udp
-NEXT_PUBLIC_TURN_USER=your-username
-NEXT_PUBLIC_TURN_PASS=your-password
+# WebRTC ICE fallback on client (STUN only by default)
 NEXT_PUBLIC_STUN_URLS=stun:stun.l.google.com:19302
 
 # Signaling server settings (server-side only)
+TURN_URLS=turn:your-turn-server.com:3478?transport=udp,turn:your-turn-server.com:3478?transport=tcp,turns:your-turn-server.com:5349?transport=tcp
+TURN_USERNAME=your-username
+TURN_CREDENTIAL=your-password
+
+# Do not set NEXT_PUBLIC_TURN_USER / NEXT_PUBLIC_TURN_PASS in production.
+# TURN credentials are provided by signaling server events.
 SIGNALING_CORS_ALLOWED_ORIGINS=https://your-frontend.com
 SIGNALING_HEALTH_DIAGNOSTICS_TOKEN=replace-with-strong-token
 NODE_ENV=production

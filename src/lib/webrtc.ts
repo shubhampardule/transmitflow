@@ -2,7 +2,7 @@
 // Primary path is binary on all devices; fallback path is Base64 compatibility mode.
 
 import { FileMetadata, SignalingMessage } from '@/types';
-import { signalingService } from './signaling';
+import { signalingService, type AdaptiveTransferSettings } from './signaling';
 import { IndexedDbChunkStore } from './chunk-store';
 
 // Detect if mobile device
@@ -27,10 +27,6 @@ const parseIceUrls = (rawValue?: string): string[] => {
   );
 };
 
-const TURN_URLS = parseIceUrls(process.env.NEXT_PUBLIC_TURN_URLS || process.env.NEXT_PUBLIC_TURN_URL);
-const TURN_USERNAME = process.env.NEXT_PUBLIC_TURN_USER?.trim() || '';
-const TURN_CREDENTIAL = process.env.NEXT_PUBLIC_TURN_PASS?.trim() || '';
-const HAS_TURN_CONFIG = TURN_URLS.length > 0 && TURN_USERNAME.length > 0 && TURN_CREDENTIAL.length > 0;
 const STUN_URLS = parseIceUrls(process.env.NEXT_PUBLIC_STUN_URLS || process.env.NEXT_PUBLIC_STUN_URL);
 const DEFAULT_PUBLIC_STUN_URLS = [
   'stun:stun.l.google.com:19302',
@@ -64,6 +60,15 @@ const CONFIG = {
   CHUNK_REQUEST_ATTEMPTS: 3,         // Number of repair rounds before failing
   CHUNK_REQUEST_WAIT_MS: 5000,       // Wait window after each repair request
   DISCONNECT_RECOVERY_MS: 8000,      // Grace period before treating disconnect as terminal
+};
+
+const ADAPTIVE_LIMITS = {
+  MIN_CHUNK_SIZE: 32 * 1024,
+  MAX_CHUNK_SIZE: 256 * 1024,
+  MIN_BUFFER_THRESHOLD: 128 * 1024,
+  MAX_BUFFER_THRESHOLD: 4 * 1024 * 1024,
+  MIN_SEND_DELAY_MS: 0,
+  MAX_SEND_DELAY_MS: 80,
 };
 
 // Message types for both protocols
@@ -155,16 +160,11 @@ export class WebRTCService {
   // Adaptive settings
   private chunkSize: number = CONFIG.BINARY_CHUNK_SIZE_NORMAL;
   private bufferThreshold: number = CONFIG.BINARY_BUFFER_THRESHOLD;
+  private adaptiveSendDelayMs = 0;
   
   // ICE configuration
   private readonly baseConfig: RTCConfiguration = {
     iceServers: [
-      ...(HAS_TURN_CONFIG ? [{
-        urls: TURN_URLS,
-        username: TURN_USERNAME,
-        credential: TURN_CREDENTIAL
-      }] : []),
-      
       ...(EFFECTIVE_STUN_URLS.length > 0 ? [{
         urls: EFFECTIVE_STUN_URLS
       }] : []),
@@ -451,6 +451,58 @@ export class WebRTCService {
     return !!fileInfo && fileInfo.receivedChunks.size >= expectedChunks;
   }
 
+  private clampInteger(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, Math.floor(value)));
+  }
+
+  private applyAdaptiveSettings(
+    settings: AdaptiveTransferSettings | null,
+    source: 'initial-signaling' | 'pre-transfer' | 'live-update' | 'compatibility-fallback',
+  ): void {
+    if (!settings) {
+      return;
+    }
+
+    const chunkSize = this.clampInteger(
+      settings.chunkSize,
+      ADAPTIVE_LIMITS.MIN_CHUNK_SIZE,
+      ADAPTIVE_LIMITS.MAX_CHUNK_SIZE,
+    );
+    const bufferThreshold = this.clampInteger(
+      settings.bufferSize,
+      ADAPTIVE_LIMITS.MIN_BUFFER_THRESHOLD,
+      ADAPTIVE_LIMITS.MAX_BUFFER_THRESHOLD,
+    );
+    const sendDelay = this.clampInteger(
+      settings.delay,
+      ADAPTIVE_LIMITS.MIN_SEND_DELAY_MS,
+      ADAPTIVE_LIMITS.MAX_SEND_DELAY_MS,
+    );
+
+    const nextChunkSize = this.transferMethod === 'base64'
+      ? Math.min(chunkSize, CONFIG.BASE64_CHUNK_SIZE)
+      : chunkSize;
+    const nextBufferThreshold = this.transferMethod === 'base64'
+      ? Math.min(bufferThreshold, CONFIG.BASE64_BUFFER_THRESHOLD)
+      : bufferThreshold;
+
+    const hasChanged = (
+      nextChunkSize !== this.chunkSize ||
+      nextBufferThreshold !== this.bufferThreshold ||
+      sendDelay !== this.adaptiveSendDelayMs
+    );
+
+    this.chunkSize = nextChunkSize;
+    this.bufferThreshold = nextBufferThreshold;
+    this.adaptiveSendDelayMs = sendDelay;
+
+    if (hasChanged) {
+      console.log(
+        `Applied adaptive settings (${source}): chunk=${this.chunkSize}, buffer=${this.bufferThreshold}, delay=${this.adaptiveSendDelayMs}ms`,
+      );
+    }
+  }
+
   private configureTransferMode(method: TransferMethod): void {
     this.transferMethod = method;
 
@@ -474,6 +526,7 @@ export class WebRTCService {
     this.fallbackToCompatibilityMode = true;
     console.warn(reason, error);
     this.configureTransferMode('base64');
+    this.applyAdaptiveSettings(signalingService.getAdaptiveSettings(), 'compatibility-fallback');
     this.onStatusMessage?.('Switching to compatibility mode for this connection...');
   }
 
@@ -922,6 +975,13 @@ export class WebRTCService {
     
     // Use binary as the default for every device. Fall back automatically if required.
     this.configureTransferMode('binary');
+    this.applyAdaptiveSettings(signalingService.getAdaptiveSettings(), 'initial-signaling');
+    signalingService.onAdaptiveSettingsUpdate((settings) => {
+      if (this.role !== 'sender' || this.isTerminalLifecycleState()) {
+        return;
+      }
+      this.applyAdaptiveSettings(settings, 'live-update');
+    });
 
     console.log(`Device type: ${this.senderIsMobile ? 'Mobile' : 'PC'}, transfer mode: ${this.transferMethod} (binary-first)`);
     console.log(`Using ${this.transferMethod} transfer with chunk size ${this.chunkSize / 1024}KB`);
@@ -1316,6 +1376,7 @@ export class WebRTCService {
     this.transitionLifecycleState('transferring', 'start-transfer');
 
     try {
+      this.applyAdaptiveSettings(signalingService.getAdaptiveSettings(), 'pre-transfer');
       await this.ensureBinaryReadyOrFallback();
 
       this.notifyServerTransferStart();
@@ -1385,12 +1446,10 @@ export class WebRTCService {
 
     const binaryChannel = await this.waitForChannelOpen(() => this.binaryChannel, 'binary', 15000);
 
-    // Dynamic chunk sizing based on file size for optimal speed
-    let dynamicChunkSize = this.chunkSize;
+    // Keep one effective chunk size per file to avoid cross-device inconsistency.
+    const dynamicChunkSize = this.chunkSize;
     if (file.size > CONFIG.LARGE_FILE_THRESHOLD) {
-      // Use larger chunks for big files
-      dynamicChunkSize = CONFIG.BINARY_CHUNK_SIZE_NORMAL;
-      console.log(`Large file detected: Using ${dynamicChunkSize / 1024}KB chunks for better speed`);
+      console.log(`Large file detected: using ${dynamicChunkSize / 1024}KB binary chunks`);
     }
 
     const totalChunks = Math.ceil(file.size / dynamicChunkSize);
@@ -1469,6 +1528,10 @@ export class WebRTCService {
       chunkIndex++;
 
       this.updateSendProgress(fileIndex, offset, file.size);
+
+      if (this.adaptiveSendDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, this.adaptiveSendDelayMs));
+      }
     }
 
     if (!this.cancelledFiles.has(fileIndex)) {
@@ -1594,7 +1657,10 @@ export class WebRTCService {
     const bufferLimit = this.bufferThreshold * 0.7;
     let waitCount = 0;
     const maxWaits = 200;
-    const waitTime = this.senderIsMobile ? 20 : 8;
+    const baseWaitTime = this.senderIsMobile ? 20 : 8;
+    const waitTime = this.adaptiveSendDelayMs > 0
+      ? Math.max(baseWaitTime, Math.min(40, this.adaptiveSendDelayMs))
+      : baseWaitTime;
 
     while (this.dataChannel && this.dataChannel.bufferedAmount > bufferLimit && waitCount < maxWaits) {
       await new Promise((resolve) => setTimeout(resolve, waitTime));
@@ -1609,9 +1675,12 @@ export class WebRTCService {
       console.warn('Buffer wait timeout for chunk ' + chunkIndex + ' of file ' + fileIndex);
     }
 
-    // Small pacing only on constrained devices.
-    if (this.senderIsMobile) {
-      await new Promise((resolve) => setTimeout(resolve, 8));
+    // Apply light pacing on constrained devices and adaptive pacing on weak links.
+    const pacingDelayMs = this.senderIsMobile
+      ? Math.max(8, this.adaptiveSendDelayMs)
+      : this.adaptiveSendDelayMs;
+    if (pacingDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, pacingDelayMs));
     }
 
     // Send chunk with validation
@@ -1658,16 +1727,29 @@ export class WebRTCService {
       
       const speed = elapsed > 0 ? actualNetworkBytes / elapsed : 0;
       
+      const progressPercent = (bytesSent / totalBytes) * 100;
+
       this.onTransferProgress?.({
         fileName: this.filesToSend[fileIndex].name,
         fileIndex,
-        progress: (bytesSent / totalBytes) * 100,
+        progress: progressPercent,
         bytesTransferred: bytesSent,
         totalBytes,
         speed, // Now reflects actual network usage
         stage: 'transferring',
         conversionProgress: undefined,
       });
+
+      if (this.role === 'sender' && this.serverTransferActive && this.roomCode) {
+        signalingService.emitTransferProgress(this.roomCode, {
+          fileIndex,
+          progress: progressPercent,
+          bytesTransferred: bytesSent,
+          totalBytes,
+          speed,
+          stage: 'transferring',
+        });
+      }
       
       progress.lastProgressUpdate = now;
     }
@@ -2855,6 +2937,7 @@ export class WebRTCService {
     this.serverTransferActive = false;
     this.fallbackToCompatibilityMode = false;
     this.senderIsMobile = false;
+    this.adaptiveSendDelayMs = 0;
     this.configureTransferMode('binary');
     this.pendingIceCandidates = [];
     this.hasRemoteDescription = false;
