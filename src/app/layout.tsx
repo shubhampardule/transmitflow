@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import PwaManager from '@/components/ui/PwaManager';
 import ProductionLogGuard from '@/components/ui/ProductionLogGuard';
@@ -67,6 +68,7 @@ export default function RootLayout({
           <ProductionLogGuard />
           <PwaManager />
           {children}
+          <Analytics />
           <SpeedInsights />
         </ThemeProvider>
       </body>
