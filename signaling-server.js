@@ -54,11 +54,8 @@ const HEALTH_DIAGNOSTICS_TOKEN =
 
 const DEFAULT_PRODUCTION_ORIGINS = [
   'https://transmitflow.vercel.app',
-  'https://sendify-ivory.vercel.app',
-  'https://sendify-ten.vercel.app',
-  'https://sendify.vercel.app',
-  'https://serverforminecraftbedrock.fun',
-  'https://www.serverforminecraftbedrock.fun',
+  'https://transmitflow.app',
+  'https://www.transmitflow.app',
 ];
 
 const DEFAULT_DEVELOPMENT_ORIGINS = [
@@ -151,7 +148,7 @@ app.get('/health/diagnostics', (req, res) => {
 
 app.get('/', (req, res) => {
   res.status(200).json({
-    message: 'Sendify P2P Signaling Server - Long Distance Optimized',
+    message: 'TransmitFlow P2P Signaling Server - Long Distance Optimized',
     status: 'Running',
     version: SERVER_VERSION,
     features: [
@@ -1944,7 +1941,7 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  logInfo(`Enhanced Sendify Signaling Server running on port ${PORT}`);
+  logInfo(`Enhanced TransmitFlow Signaling Server running on port ${PORT}`);
   logInfo('Optimized for long-distance WebRTC connections');
   logInfo(
     `🌍 ICE config: ${turnServers.length} server entries (${hasCustomTurnConfigured ? 'custom TURN enabled' : 'STUN-only fallback'})`,

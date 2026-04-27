@@ -22,7 +22,7 @@ export default function ThemeToggle() {
       size="icon"
       ref={ref}
       onClick={toggleSwitchTheme}
-      className="h-8 w-8 md:h-9 md:w-9 rounded-full bg-white/10 hover:bg-white/20 dark:bg-black/10 dark:hover:bg-black/20 border border-white/20 dark:border-black/20 transition-all duration-300 ease-in-out motion-reduce:transition-none"
+      className="h-8 w-8 md:h-9 md:w-9 rounded-full bg-white/10 hover:bg-white/20 dark:bg-black/10 dark:hover:bg-black/20 border border-white/20 dark:border-black/20 transition-colors duration-200 ease-out motion-reduce:transition-none"
       title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
       aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
     >

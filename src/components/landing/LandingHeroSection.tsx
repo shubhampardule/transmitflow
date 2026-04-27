@@ -1,4 +1,7 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+"use client";
+
+import { useEffect, useRef } from 'react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Upload, Download, Shield, Globe, Lock, Rocket } from 'lucide-react';
 import SendFilesPanel from '@/components/SendFilesPanel';
@@ -32,6 +35,19 @@ export default function LandingHeroSection({
   onReceiveFiles,
   roomCode,
 }: LandingHeroSectionProps) {
+  const previousTabRef = useRef<'send' | 'receive'>(activeTab);
+
+  const panelTransitionClass =
+    previousTabRef.current === 'send' && activeTab === 'receive'
+      ? 'animate-tab-slide-left'
+      : previousTabRef.current === 'receive' && activeTab === 'send'
+        ? 'animate-tab-slide-right'
+        : 'animate-tab-slide-left';
+
+  useEffect(() => {
+    previousTabRef.current = activeTab;
+  }, [activeTab]);
+
   return (
     <section className="pt-12 md:pt-20 lg:pt-28 pb-16 lg:pb-24">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
@@ -75,12 +91,18 @@ export default function LandingHeroSection({
                       Receive
                     </TabsTrigger>
                   </TabsList>
-                  <TabsContent value="send" className="mt-6">
-                    <SendFilesPanel onSendFiles={onSendFiles} disabled={!isConnected} roomCode={roomCode} />
-                  </TabsContent>
-                  <TabsContent value="receive" className="mt-6">
-                    <ReceiveFilesPanel onReceiveFiles={onReceiveFiles} disabled={!isConnected} />
-                  </TabsContent>
+                  <div className="mt-6">
+                    <div
+                      key={activeTab}
+                      className={panelTransitionClass}
+                    >
+                      {activeTab === 'send' ? (
+                        <SendFilesPanel onSendFiles={onSendFiles} disabled={!isConnected} roomCode={roomCode} />
+                      ) : (
+                        <ReceiveFilesPanel onReceiveFiles={onReceiveFiles} disabled={!isConnected} />
+                      )}
+                    </div>
+                  </div>
                 </Tabs>
               </div>
             </div>

@@ -40,7 +40,7 @@
 <br/><em>Scan QR or enter room code</em>
 </td>
 <td width="33%" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Transfering.png" alt="Transfer Progress" width="100%"/>
+<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Transfer%20Progress.png" alt="Transfer Progress" width="100%"/>
 <br/><strong>Transfer Progress</strong>
 <br/><em>Real-time progress per file</em>
 </td>
@@ -50,7 +50,7 @@
 
 ## Features
 
-- **Direct P2P Transfer** — Files go straight between devices via WebRTC. Nothing stored on any server.
+- **Direct Device Transfer** — Files go straight between devices via WebRTC. Nothing stored on any server.
 - **QR Code Pairing** — Sender generates a QR code; receiver scans it to connect instantly.
 - **Cross-Platform** — Works in any modern browser on Windows, Mac, Linux, iOS, Android. No app install needed.
 - **Multi-File & Batch Transfer** — Select multiple files, monitor each one individually.
@@ -58,7 +58,7 @@
 - **SHA-256 Integrity** — File hash verified after transfer to ensure nothing was corrupted.
 - **IndexedDB Persistence** — Large files stored in chunks to reduce RAM pressure.
 - **Missing-Chunk Recovery** — Automatic retry for any chunks lost during transfer.
-- **STUN/TURN Failover** — Direct P2P when possible, TURN relay when firewalls block direct connections.
+- **STUN/TURN Failover** — Direct connection when possible, TURN relay when firewalls block direct connections.
 - **PWA Support** — Installable as an app, works offline with service worker caching.
 - **Dark / Light Theme** — Automatic theme switching based on system preference.
 
@@ -78,7 +78,7 @@ graph LR
     D -->|4. Exchange SDP + ICE| C
     A -->|5. NAT Traversal| E[🛡️ STUN/TURN Servers]
     C -->|5. NAT Traversal| E
-    A -.->|6. Direct P2P Transfer| C
+    A -.->|6. Direct Device Transfer| C
     A -.->|6. Or TURN Relay| E
     E -.->|6. If Needed| C
     
@@ -106,7 +106,7 @@ graph LR
 <td width="33%" align="center">
 
 #### 🎯 STUN
-Discovers your public IP and NAT type to enable direct P2P connections. Works for ~70% of network configurations.
+Discovers your public IP and NAT type to enable direct device-to-device connections. Works for ~70% of network configurations.
 
 </td>
 <td width="33%" align="center">
@@ -118,7 +118,7 @@ Relay fallback when firewalls or strict NAT block direct connections. Ensures 99
 <td width="33%" align="center">
 
 #### ⚡ Our Approach
-Try direct P2P first (STUN), auto-fallback to TURN relay, multiple servers for reliability. No user configuration needed.
+Try direct connection first (STUN), auto-fallback to TURN relay, multiple servers for reliability. No user configuration needed.
 
 </td>
 </tr>
@@ -128,7 +128,7 @@ Try direct P2P first (STUN), auto-fallback to TURN relay, multiple servers for r
 graph TD
     A[📱 Start Connection] --> B[📡 Signaling: Exchange SDP + ICE]
     B --> C{🔍 STUN: Can connect directly?}
-    C -->|✅ Yes| D[🎯 Direct P2P Connection]
+    C -->|✅ Yes| D[🎯 Direct Device Connection]
     C -->|❌ No| E{🔄 TURN: Use relay server?}
     E -->|✅ Available| F[🛣️ TURN Relay Connection]
     E -->|❌ No TURN| G[⚠️ Connection Failed]
@@ -173,7 +173,7 @@ graph TD
 |:------|:-----------|:--------|
 | **Frontend** | Next.js 15.5.12 + React 19.1.0 | App Router with Turbopack |
 | **UI** | Tailwind CSS + shadcn/ui | Accessible, responsive components |
-| **P2P Engine** | WebRTC Data Channels | Direct device-to-device file transfer |
+| **Transfer Engine** | WebRTC Data Channels | Direct device-to-device file transfer |
 | **Signaling** | Socket.IO 4.8.1 + Express 5.1.0 | Real-time connection coordination |
 | **Type Safety** | TypeScript 5+ | Compile-time error checking |
 | **QR** | @yudiel/react-qr-scanner + qrcode | Scan & generate QR codes |
@@ -396,7 +396,7 @@ Security hardening work is complete. See [SECURITY.md](SECURITY.md) for our vuln
 | **Files won't transfer** | Check that both peers are connected and signaling server is reachable. Check firewall/NAT. |
 | **QR code won't scan** | Ensure camera permission is granted. Improve lighting. Use manual room code as fallback. |
 | **Large files fail on mobile** | Use smaller batches. IndexedDB helps, but very large files can hit browser limits. |
-| **Slow transfer speed** | Use same WiFi network. Avoid VPN/proxy. TURN relay is slower than direct P2P. |
+| **Slow transfer speed** | Use same WiFi network. Avoid VPN/proxy. TURN relay is slower than a direct connection. |
 | **Connection timeout** | Both devices must be online simultaneously. Retry if signaling server was cold-starting. |
 
 ### Browser Support

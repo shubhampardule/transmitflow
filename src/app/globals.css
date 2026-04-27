@@ -115,9 +115,41 @@
   animation: glow-pulse 2.5s ease-in-out infinite;
 }
 
+@keyframes tab-slide-left {
+  0% {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tab-slide-right {
+  0% {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-tab-slide-left {
+  animation: tab-slide-left 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.animate-tab-slide-right {
+  animation: tab-slide-right 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .blob,
   .animate-glow-pulse,
+  .animate-tab-slide-left,
+  .animate-tab-slide-right,
   .animate-in,
   .fade-in {
     animation: none !important;
