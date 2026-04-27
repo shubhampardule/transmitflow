@@ -18,6 +18,7 @@ All types of contributions are encouraged and valued. See the [Table of Contents
   - [Reporting Bugs](#reporting-bugs)
   - [Suggesting Enhancements](#suggesting-enhancements)
   - [Your First Code Contribution](#your-first-code-contribution)
+  - [Contribution Licensing](#contribution-licensing)
   - [Improving The Documentation](#improving-the-documentation)
 - [Styleguides](#styleguides)
   - [Commit Messages](#commit-messages)
@@ -106,6 +107,10 @@ Enhancement suggestions are tracked as [GitHub issues](https://github.com/shubha
 3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
+
+### Contribution Licensing
+
+By submitting code, documentation, or other content to this repository, you agree that your contributions will be licensed under the same license as this project: **MIT**.
 
 ## Styleguides
 

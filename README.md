@@ -30,17 +30,17 @@
 <table>
 <tr>
 <td width="33%" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Send.png" alt="Send Files" width="100%"/>
+<img src="public/images/SendSection.png" alt="Send Files" width="100%"/>
 <br/><strong>Send Files</strong>
 <br/><em>Select files & share QR code</em>
 </td>
 <td width="33%" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Receive.png" alt="Receive Files" width="100%"/>
+<img src="public/images/ReceiveSection.png" alt="Receive Files" width="100%"/>
 <br/><strong>Receive Files</strong>
 <br/><em>Scan QR or enter room code</em>
 </td>
 <td width="33%" align="center">
-<img src="https://raw.githubusercontent.com/shubhampardule/transmitflow/main/public/images/Transfer%20Progress.png" alt="Transfer Progress" width="100%"/>
+<img src="public/images/Transfer Progress.png" alt="Transfer Progress" width="100%"/>
 <br/><strong>Transfer Progress</strong>
 <br/><em>Real-time progress per file</em>
 </td>
@@ -477,10 +477,9 @@ git push origin feature/my-feature
 
 ## License
 
-Licensed under **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)** — see [LICENSE](LICENSE).
+Licensed under the **MIT License** — see [LICENSE](LICENSE).
 
-**Allowed:** Personal use, educational use, sharing, modifications with attribution.
-**Not allowed:** Commercial use, selling or monetizing the software.
+You are free to use, modify, distribute, and use this software commercially, provided the copyright notice and license text are included in substantial portions of the software.
 
 ---
 

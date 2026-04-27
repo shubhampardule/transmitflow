@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI pipeline now includes browser support matrix validation.
 - Drag-and-drop zone now shows clear active-state feedback during file hover.
 - File entries render type-specific icons (image, video, audio, archive, code, spreadsheet, generic fallback).
+- Licensing was clarified to a single MIT open-source model to support broad community contributions and commercial use.
 
 ### Fixed
 - Room-code receive input clipping and readability issues on small screens.
