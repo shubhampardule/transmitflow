@@ -1,5 +1,5 @@
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
-const DEFAULT_SIGNALING_ORIGINS = ['https://signaling-server-6ziv.onrender.com'];
+const DEFAULT_SIGNALING_ORIGINS = ['https://api.transmitflow.fun'];
 
 const toOrigin = (value) => {
   if (!value || typeof value !== 'string') return null;

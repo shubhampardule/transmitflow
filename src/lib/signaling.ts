@@ -201,7 +201,7 @@ class SignalingService {
         if (hostname.includes('vercel.app') || 
           hostname.includes('transmitflow.fun')) {
           // Use your deployed signaling server URL
-          this.serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'https://signaling-server-6ziv.onrender.com';
+          this.serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'https://api.transmitflow.fun';
         } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
           this.serverUrl = 'http://localhost:3001';
         } else {
