@@ -53,9 +53,8 @@ const HEALTH_DIAGNOSTICS_TOKEN =
   '';
 
 const DEFAULT_PRODUCTION_ORIGINS = [
-  'https://transmitflow.vercel.app',
-  'https://transmitflow.app',
-  'https://www.transmitflow.app',
+  'https://transmitflow.fun',
+  'https://www.transmitflow.fun',
 ];
 
 const DEFAULT_DEVELOPMENT_ORIGINS = [

@@ -199,7 +199,7 @@ class SignalingService {
         
         // Production configuration
         if (hostname.includes('vercel.app') || 
-            hostname.includes('transmitflow.app')) {
+          hostname.includes('transmitflow.fun')) {
           // Use your deployed signaling server URL
           this.serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'https://signaling-server-6ziv.onrender.com';
         } else if (hostname === 'localhost' || hostname === '127.0.0.1') {

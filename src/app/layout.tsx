@@ -7,7 +7,7 @@ import ProductionLogGuard from '@/components/ui/ProductionLogGuard';
 import ThemeProvider from '@/components/ui/ThemeProvider';
 import "./globals.css";
 
-const DEFAULT_SITE_URL = 'https://transmitflow.vercel.app';
+const DEFAULT_SITE_URL = 'https://transmitflow.fun';
 const SITE_NAME = 'TransmitFlow';
 const SITE_DESCRIPTION = 'Private peer-to-peer file transfer with WebRTC. No account, no cloud upload step, direct device-to-device sharing.';
 

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 
-const DEFAULT_SITE_URL = 'https://transmitflow.vercel.app';
+const DEFAULT_SITE_URL = 'https://transmitflow.fun';
 
 function getBaseUrl() {
   const raw = process.env.NEXT_PUBLIC_APP_URL || DEFAULT_SITE_URL;

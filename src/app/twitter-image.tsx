@@ -69,7 +69,7 @@ export default function TwitterImage() {
           </div>
         </div>
 
-        <div style={{ fontSize: 24, opacity: 0.8 }}>transmitflow.app</div>
+        <div style={{ fontSize: 24, opacity: 0.8 }}>transmitflow.fun</div>
       </div>
     ),
     {

@@ -10,7 +10,7 @@
 
 **Send files instantly between devices — no servers store your data.**
 
-[🚀 Live Demo](https://transmitflow.vercel.app) · [📖 Architecture](docs/ARCHITECTURE.md) · [🐛 Report Bug](https://github.com/shubhampardule/transmitflow/issues) · [✨ Request Feature](https://github.com/shubhampardule/transmitflow/issues)
+[🚀 Live Demo](https://transmitflow.fun) · [📖 Architecture](docs/ARCHITECTURE.md) · [🐛 Report Bug](https://github.com/shubhampardule/transmitflow/issues) · [✨ Request Feature](https://github.com/shubhampardule/transmitflow/issues)
 
 </div>
 
