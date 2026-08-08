@@ -1,6 +1,6 @@
 # Browser Support Matrix
 
-Last Reviewed: 2026-02-13
+Last Reviewed: 2026-08-08
 Review Cadence: Every 90 days
 
 ## Supported Browsers
