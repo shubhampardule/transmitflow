@@ -342,13 +342,12 @@ export default function TransferProgress({
       {/* Room Code - Only show during initial connection phase */}
       {(transferState.status === 'idle' || transferState.status === 'connecting') && (
         <>
-          {/* Receiver: show the secure invite QR and a manual fallback (only when they generated this code themselves). */}
+          {/* Receiver: show the secure invite QR when they generated an invite themselves. */}
           {showReceiverInvite ? (
             <div className="rounded-md border border-border p-4">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div>
                   <h3 className="font-mono text-[11px] tracking-widest text-muted-foreground">RECEIVER INVITE</h3>
-                  <p className="mt-1 text-xl font-mono slashed-zero font-bold tracking-[0.25em]">{roomCode}</p>
                   <p className="mt-2 text-sm text-muted-foreground">Show this QR to the sender, then wait for the connection.</p>
                 </div>
                 {onBackToReceive ? (
