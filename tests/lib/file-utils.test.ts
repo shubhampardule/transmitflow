@@ -29,6 +29,19 @@ describe('file-utils', () => {
       expect(formatFileSize(1024 * 1024 * 1024 * 2.5)).toBe('2.5 GB');
     });
 
+    it('formats TB and PB correctly', () => {
+      expect(formatFileSize(1024 ** 4)).toBe('1 TB');
+      expect(formatFileSize(1024 ** 5)).toBe('1 PB');
+    });
+
+    it('clamps to the largest known unit instead of indexing past the table', () => {
+      // Regression test: extremely large sizes used to compute an index
+      // past the end of the `sizes` array and render "NaN undefined".
+      expect(formatFileSize(1024 ** 6)).toBe('1024 PB');
+      expect(formatFileSize(Number.MAX_SAFE_INTEGER)).not.toContain('undefined');
+      expect(formatFileSize(Number.MAX_SAFE_INTEGER)).not.toContain('NaN');
+    });
+
     it('rounds correctly for large values', () => {
         // e.g. 150.7 KB => 151 KB, based on logic in function for sizes >= 100
         // Logic: if (i === 1 && size >= 100) return `${Math.round(size)} ${sizes[i]}`;
@@ -45,7 +58,7 @@ describe('file-utils', () => {
 
     it('generates a string from allowed charset', () => {
       const code = generateRoomCode();
-      const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      const charset = '0123456789';
       for (const char of code) {
         expect(charset).toContain(char);
       }

@@ -1,143 +1,38 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import Image from 'next/image';
+import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Upload, Trash2, QrCode, Copy, Link2 } from 'lucide-react';
-import { toast } from 'sonner';
-
-import QRCode from 'qrcode';
+import { Upload, Trash2, Camera, X } from 'lucide-react';
+import { Scanner } from '@yudiel/react-qr-scanner';
 
 import { formatFileSize } from '@/lib/file-utils';
 import { getFileIcon } from '@/lib/file-icons';
 
 interface SendFilesPanelProps {
-  onSendFiles: (files: File[]) => void;
+  onSendFiles: (files: File[], roomCode?: string) => void;
   disabled: boolean;
-  roomCode: string;
 }
 
-export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: SendFilesPanelProps) {
+const ROOM_CODE_REGEX = /^[0-9]{4}$/;
+
+const extractReceiverInvite = (rawValue: string): { roomCode: string } | null => {
+  try {
+    const url = new URL(rawValue.trim());
+    const roomCode = (url.searchParams.get('receive') || '').replace(/[^0-9]/g, '').slice(0, 4);
+    return ROOM_CODE_REGEX.test(roomCode) ? { roomCode } : null;
+  } catch {
+    return null;
+  }
+};
+
+export default function SendFilesPanel({ onSendFiles, disabled }: SendFilesPanelProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
-  const [showQrCode, setShowQrCode] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
   const dragCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const getShareUrl = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return '';
-    }
-    return `${window.location.origin}?receive=${roomCode}`;
-  }, [roomCode]);
-
-  const isMobileShareSupported = useCallback(() => {
-    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-      return false;
-    }
-
-    const hasNativeShare = typeof navigator.share === 'function';
-    if (!hasNativeShare) {
-      return false;
-    }
-
-    const hasCoarsePointer = typeof window.matchMedia === 'function'
-      && window.matchMedia('(pointer: coarse)').matches;
-    const isMobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
-
-    return hasCoarsePointer || isMobileUserAgent;
-  }, []);
-
-  const copyToClipboard = useCallback(async (value: string) => {
-    if (!value) {
-      throw new Error('Nothing to copy');
-    }
-
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return;
-    }
-
-    const textarea = document.createElement('textarea');
-    textarea.value = value;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand('copy');
-    document.body.removeChild(textarea);
-  }, []);
-
-  const handleCopyCode = useCallback(async () => {
-    try {
-      await copyToClipboard(roomCode);
-      toast.success('Code copied');
-    } catch (error) {
-      console.warn('Copy code failed:', error);
-      toast.error('Could not copy code');
-    }
-  }, [copyToClipboard, roomCode]);
-
-  const handleCopyLink = useCallback(async () => {
-    try {
-      const shareUrl = getShareUrl();
-
-      if (isMobileShareSupported()) {
-        await navigator.share({
-          title: 'TransmitFlow',
-          text: `Join my room (${roomCode})`,
-          url: shareUrl,
-        });
-        return;
-      }
-
-      await copyToClipboard(shareUrl);
-      toast.success('Link copied');
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        return;
-      }
-      console.warn('Copy link failed:', error);
-      toast.error('Could not copy link');
-    }
-  }, [copyToClipboard, getShareUrl, isMobileShareSupported, roomCode]);
-
-  // Generate QR code when room code changes
-  useEffect(() => {
-    let cancelled = false;
-
-    if (roomCode) {
-      setShowQrCode(true);
-      const generateQR = async () => {
-        try {
-          const shareUrl = getShareUrl();
-          const qrDataUrl = await QRCode.toDataURL(shareUrl, {
-            width: 256,
-            margin: 2,
-            color: {
-              dark: '#000000',
-              light: '#FFFFFF'
-            }
-          });
-          if (!cancelled) {
-            setQrCodeUrl(qrDataUrl);
-          }
-        } catch (error) {
-          console.error('QR generation failed:', error);
-        }
-      };
-      generateQR();
-    } else {
-      setQrCodeUrl('');
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [getShareUrl, roomCode]);
 
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -216,191 +111,107 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-  const generateQRCode = useCallback(async () => {
-    if (!roomCode) return;
-    
-    try {
-      const shareUrl = getShareUrl();
-      const qrDataUrl = await QRCode.toDataURL(shareUrl, {
-        width: 256,
-        margin: 2,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        }
-      });
-      setQrCodeUrl(qrDataUrl);
-    } catch (error) {
-      console.error('Manual QR generation failed:', error);
-    }
-  }, [getShareUrl, roomCode]);
-
   const handleSendFiles = useCallback(() => {
     if (selectedFiles.length > 0) {
       onSendFiles(selectedFiles);
     }
   }, [selectedFiles, onSendFiles]);
 
+  const handleScanSuccess = useCallback((detectedCodes: { rawValue: string }[]) => {
+    const invite = extractReceiverInvite(detectedCodes[0]?.rawValue || '');
+    if (!invite) {
+      setScanMessage('That QR code didn\u2019t work. Ask the receiver to show theirs again.');
+      return;
+    }
+
+    setScanMessage(null);
+    setShowScanner(false);
+    onSendFiles(selectedFiles, invite.roomCode);
+  }, [onSendFiles, selectedFiles]);
+
+  const handleScanError = useCallback((error: unknown) => {
+    console.error('QR scan error:', error);
+    setScanMessage('Unable to read QR right now. Move closer and improve lighting.');
+  }, []);
+
   const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
 
-  if (roomCode) {
+  if (showScanner) {
     return (
-      <div className="space-y-5 animate-in fade-in duration-300">
-        {/* Room info card */}
-        <div className="relative rounded-2xl border border-border overflow-hidden">
-          <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-emerald-400 to-teal-500" />
-          <div className="p-6 pl-5">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 h-11 w-11 rounded-xl bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center">
-                <QrCode className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-base">Room Ready</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">Share this code with the receiver</p>
+      <div className="rounded-md border border-border p-4 md:p-6 animate-in fade-in duration-300">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Scan receiver QR</h3>
+              <p className="text-sm text-muted-foreground mt-1">Point your camera at the QR shown on the receiving device.</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setShowScanner(false)} aria-label="Close QR scanner" className="h-8 w-8 p-0">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="relative aspect-square w-full max-w-xs md:max-w-sm mx-auto rounded-md overflow-hidden bg-black">
+            <Scanner
+              onScan={handleScanSuccess}
+              onError={handleScanError}
+              formats={['qr_code']}
+              allowMultiple={false}
+              scanDelay={300}
+              constraints={{ facingMode: 'environment' }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-32 h-32 md:w-48 md:h-48 border border-white/40 relative">
+                <div className="absolute top-0 left-0 w-5 h-5 md:w-6 md:h-6 border-t-[3px] border-l-[3px] border-primary" />
+                <div className="absolute top-0 right-0 w-5 h-5 md:w-6 md:h-6 border-t-[3px] border-r-[3px] border-primary" />
+                <div className="absolute bottom-0 left-0 w-5 h-5 md:w-6 md:h-6 border-b-[3px] border-l-[3px] border-primary" />
+                <div className="absolute bottom-0 right-0 w-5 h-5 md:w-6 md:h-6 border-b-[3px] border-r-[3px] border-primary" />
               </div>
             </div>
-
-            <div className="mt-5 space-y-4">
-              <div className="p-4 bg-muted/70 rounded-xl text-center">
-                <div className="font-mono slashed-zero text-2xl md:text-3xl font-bold tracking-[0.35em] text-foreground">
-                  {roomCode}
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full rounded-lg"
-                  onClick={handleCopyCode}
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy code
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full rounded-lg"
-                  onClick={handleCopyLink}
-                >
-                  <Link2 className="h-4 w-4 mr-2" />
-                  {isMobileShareSupported() ? 'Share link' : 'Copy link'}
-                </Button>
-                {qrCodeUrl ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-full rounded-lg"
-                    onClick={() => setShowQrCode((prev) => !prev)}
-                  >
-                    <QrCode className="h-4 w-4 mr-2" />
-                    {showQrCode ? 'Hide QR' : 'Show QR'}
-                  </Button>
-                ) : null}
-              </div>
-
-              {qrCodeUrl ? (
-                showQrCode ? (
-                  <div className="flex justify-center">
-                    <div className="p-2 bg-white rounded-xl shadow-sm">
-                      <Image
-                        src={qrCodeUrl}
-                        alt="QR Code"
-                        width={200}
-                        height={200}
-                        className="rounded-lg"
-                      />
-                    </div>
-                  </div>
-                ) : null
-              ) : (
-                <Button onClick={generateQRCode} variant="outline" size="sm" className="w-full rounded-lg">
-                  <QrCode className="h-4 w-4 mr-2" />
-                  Generate QR Code
-                </Button>
-              )}
-            </div>
           </div>
-        </div>
-
-        {/* Queued files */}
-        <div className="rounded-2xl border border-border p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Queued Files</h4>
-            <Badge variant="secondary" className="text-xs">{selectedFiles.length}</Badge>
-          </div>
-          <div className="space-y-2">
-            {selectedFiles.map((file, index) => {
-              const Icon = getFileIcon(file.name, file.type);
-              return (
-              <div key={index} className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl">
-                <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-indigo-100 dark:bg-indigo-500/15 flex items-center justify-center">
-                  <Icon className="h-4 w-4 text-indigo-500" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium text-sm truncate">{file.name}</div>
-                  <div className="text-xs text-muted-foreground">{formatFileSize(file.size)}</div>
-                </div>
-              </div>
-              );
-            })}
-          </div>
-          <div className="mt-4 pt-4 border-t border-border/60 flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Total</span>
-            <span className="font-semibold">{selectedFiles.length} files · {formatFileSize(totalSize)}</span>
-          </div>
+          {scanMessage && <p className="text-xs text-destructive text-center">{scanMessage}</p>}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-300">
+    <div className="space-y-4 animate-in fade-in duration-300">
       {/* Drop zone */}
       {selectedFiles.length === 0 && (
-        <div
-          className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-colors duration-200 cursor-pointer group overflow-hidden ${
-            isDragging
-              ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-500/10 shadow-lg shadow-indigo-500/10'
-              : 'border-border hover:border-indigo-400/50 dark:hover:border-indigo-500/30'
-          }`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <div className={`absolute inset-0 transition-all duration-300 ${
-            isDragging
-              ? 'bg-gradient-to-br from-indigo-50/80 to-purple-50/60 dark:from-indigo-500/10 dark:to-purple-500/8'
-              : 'bg-gradient-to-br from-indigo-50/0 to-indigo-50/0 group-hover:from-indigo-50/60 group-hover:to-purple-50/40 dark:group-hover:from-indigo-500/5 dark:group-hover:to-purple-500/5'
-          }`} />
-          <div className="relative space-y-4">
-            <div className={`mx-auto w-fit rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 p-4 transition-transform duration-300 ${
-              isDragging ? 'scale-110' : 'group-hover:scale-110'
-            }`}>
-              <Upload className={`h-7 w-7 transition-colors duration-200 ${
-                isDragging ? 'text-indigo-600 dark:text-indigo-300' : 'text-indigo-500'
-              }`} />
-            </div>
-            <div>
-              <p className="text-base font-semibold">
-                {isDragging ? 'Drop files here' : 'Choose files to share'}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {isDragging ? 'Release to add files' : 'Drop files here or click to browse'}
-              </p>
-              <p className={`text-[11px] mt-2 transition-opacity duration-200 ${
-                isDragging ? 'opacity-0' : 'opacity-100 text-amber-600 dark:text-amber-400'
+        <>
+          <div
+            className={`relative border border-dashed rounded-md p-8 text-center transition-colors duration-150 cursor-pointer ${
+              isDragging
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-foreground/40'
+            }`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div className="space-y-3">
+              <div className={`mx-auto w-fit rounded-md border p-3 transition-colors duration-150 ${
+                isDragging ? 'border-primary text-primary' : 'border-border text-muted-foreground'
               }`}>
-                Large files may be slow on mobile connections
-              </p>
+                <Upload className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">
+                  {isDragging ? 'Drop files here' : 'Choose files to share'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isDragging ? 'Release to add files' : 'Drop files here or click to browse'}
+                </p>
+                <p className="font-mono text-[10px] tracking-wide text-muted-foreground/70 mt-3">
+                  NOTE — LARGE FILES MAY BE SLOWER ON MOBILE
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+
+          {scanMessage && <p className="text-xs text-destructive text-center">{scanMessage}</p>}
+        </>
       )}
 
       <input
@@ -413,11 +224,11 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
 
       {/* Selected files list */}
       {selectedFiles.length > 0 && (
-        <div className="rounded-2xl border border-border p-4 md:p-5">
+        <div className="rounded-md border border-border p-4 md:p-5">
           <div className="flex items-center justify-between mb-3 md:mb-4">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Selected Files</h4>
-            <Badge variant="secondary" className="text-xs">
-              {selectedFiles.length} files
+            <h4 className="font-mono text-[11px] tracking-widest text-muted-foreground">SELECTED</h4>
+            <Badge variant="secondary">
+              {selectedFiles.length} {selectedFiles.length === 1 ? 'file' : 'files'}
             </Badge>
           </div>
 
@@ -426,25 +237,25 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
               type="button"
               variant="outline"
               size="sm"
-              className="w-full rounded-lg"
+              className="w-full"
               onClick={() => fileInputRef.current?.click()}
             >
-              <Upload className="h-4 w-4 mr-2" />
+              <Upload className="h-4 w-4" />
               Select more files
             </Button>
           </div>
 
-          <div className="space-y-2 max-h-44 md:max-h-60 overflow-y-auto pr-1">
+          <div className="space-y-1.5 max-h-44 md:max-h-60 overflow-y-auto pr-1">
             {selectedFiles.map((file, index) => {
               const Icon = getFileIcon(file.name, file.type);
               return (
-              <div key={index} className="flex items-center gap-3 p-2.5 md:p-3 bg-muted/40 rounded-xl group/item">
-                <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-violet-100 dark:bg-violet-500/15 flex items-center justify-center">
-                  <Icon className="h-4 w-4 text-violet-500" />
+              <div key={index} className="flex items-center gap-3 p-2.5 md:p-3 border border-border rounded-md group/item">
+                <div className="flex-shrink-0 h-8 w-8 rounded-md border border-border flex items-center justify-center text-muted-foreground">
+                  <Icon className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="font-medium text-sm truncate">{file.name}</div>
-                  <div className="text-xs text-muted-foreground">{formatFileSize(file.size)}</div>
+                  <div className="font-mono text-xs text-muted-foreground">{formatFileSize(file.size)}</div>
                 </div>
                 <Button
                   variant="ghost"
@@ -452,7 +263,7 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
                   onClick={(e) => { e.stopPropagation(); removeFile(index); }}
                   aria-label={`Remove ${file.name}`}
                   title={`Remove ${file.name}`}
-                  className="flex-shrink-0 h-8 w-8 p-0 text-muted-foreground hover:text-red-500 opacity-100 md:opacity-0 md:group-hover/item:opacity-100 transition-opacity"
+                  className="flex-shrink-0 h-8 w-8 p-0 text-muted-foreground hover:text-destructive opacity-100 md:opacity-0 md:group-hover/item:opacity-100 transition-opacity"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -461,22 +272,36 @@ export default function SendFilesPanel({ onSendFiles, disabled, roomCode }: Send
             })}
           </div>
 
-          <div className="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-border/60">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Total</span>
-              <span className="font-semibold">{selectedFiles.length} files · {formatFileSize(totalSize)}</span>
+          <div className="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-border font-mono">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>TOTAL</span>
+              <span className="text-foreground">{selectedFiles.length} files · {formatFileSize(totalSize)}</span>
             </div>
           </div>
 
-          <div className="mt-3 md:mt-4">
+          <div className="mt-3 md:mt-4 space-y-2">
             <Button
               onClick={handleSendFiles}
               disabled={disabled}
-              className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/20 hover:shadow-xl hover:shadow-indigo-500/30 hover:brightness-110 transition-all"
+              className="w-full"
               size="lg"
             >
-              <Upload className="h-4 w-4 mr-2" />
-              Start Sharing
+              <Upload className="h-4 w-4" />
+              Send files
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setScanMessage(null);
+                setShowScanner(true);
+              }}
+              disabled={disabled}
+              className="w-full"
+              size="lg"
+            >
+              <Camera className="h-4 w-4" />
+              Scan QR
             </Button>
           </div>
         </div>

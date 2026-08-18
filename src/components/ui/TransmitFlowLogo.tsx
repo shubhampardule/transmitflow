@@ -6,9 +6,6 @@ interface TransmitFlowLogoProps {
 }
 
 export default function TransmitFlowLogo({ size = 24, className = "" }: TransmitFlowLogoProps) {
-  const id = React.useId();
-  const g = `${id}-g`;
-
   return (
     <svg
       width={size}
@@ -19,19 +16,15 @@ export default function TransmitFlowLogo({ size = 24, className = "" }: Transmit
       role="img"
       aria-label="TransmitFlow logo"
     >
-      <defs>
-        <linearGradient id={g} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#6366F1" />
-          <stop offset="50%" stopColor="#A855F7" />
-          <stop offset="100%" stopColor="#EC4899" />
-        </linearGradient>
-      </defs>
+      {/* Flight path — two dots between the nodes */}
+      <circle cx="47" cy="53" r="2.75" className="text-primary" fill="currentColor" />
+      <circle cx="53" cy="47" r="2.75" className="text-primary" fill="currentColor" />
 
-      {/* Large body */}
-      <circle cx="58" cy="55" r="28" fill={`url(#${g})`} />
+      {/* Node A (sender) */}
+      <rect x="14" y="56" width="28" height="28" rx="3" fill="currentColor" />
 
-      {/* Orbiting small body */}
-      <circle cx="24" cy="24" r="14" fill={`url(#${g})`} />
+      {/* Node B (receiver) */}
+      <rect x="58" y="16" width="28" height="28" rx="3" fill="currentColor" />
     </svg>
   );
 }

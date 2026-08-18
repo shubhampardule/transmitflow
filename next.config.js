@@ -127,13 +127,6 @@ const nextConfig = {
       },
     ],
   },
-  // Allow cross-origin requests from network
-  allowedDevOrigins: [
-    'http://192.168.0.117',
-    'http://192.168.0.104',
-    // Add other network IPs as needed
-  ],
-  // Allow access from network
   async rewrites() {
     return []
   },

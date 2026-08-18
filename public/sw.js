@@ -85,7 +85,7 @@ self.addEventListener('fetch', (event) => {
             runtimeCache.put(navigationCacheKey, networkResponse.clone());
           }
           return networkResponse;
-        } catch (error) {
+        } catch {
           if (shouldCacheNavigation) {
             const cachedPage = await caches.match(navigationCacheKey);
             if (cachedPage) {
@@ -132,7 +132,7 @@ self.addEventListener('fetch', (event) => {
           runtimeCache.put(request, networkResponse.clone());
         }
         return networkResponse;
-      } catch (error) {
+      } catch {
         return new Response('Offline', {
           status: 503,
           statusText: 'Offline',

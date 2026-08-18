@@ -73,7 +73,7 @@ const toUserFriendlyCancelMessage = (
 
 export function useP2PTransferController() {
   const [isConnected, setIsConnected] = useState(false);
-  const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
+  const [isOnline, setIsOnline] = useState(true);
   const [signalingError, setSignalingError] = useState<string | null>(null);
   const signalingConnectInFlightRef = useRef(false);
   const [activeTab, setActiveTab] = useState<'send' | 'receive'>(() => {
@@ -92,6 +92,7 @@ export function useP2PTransferController() {
   const [transferEndedAt, setTransferEndedAt] = useState<number | null>(null);
 
   const [roomCode, setRoomCode] = useState('');
+  const [receiveMode, setReceiveMode] = useState<'qr' | 'code' | null>(null);
   const [receivedFiles, setReceivedFiles] = useState<File[]>([]);
   const [hasNavigatedToSharing, setHasNavigatedToSharing] = useState(false);
   const transferStatusRef = useRef<TransferState['status']>('idle');
@@ -107,6 +108,9 @@ export function useP2PTransferController() {
   const autoDownloadFailureToastShownRef = useRef(false);
   const shownToastKeysRef = useRef<Set<string>>(new Set());
   const senderFilesRef = useRef<File[]>([]);
+  const roomCreationRoleRef = useRef<'sender' | 'receiver' | null>(null);
+  const roomCodeTakenRetriesRef = useRef(0);
+  const activeRoomCodeRef = useRef('');
 
   const attemptSignalingConnect = useCallback(async () => {
     if (signalingConnectInFlightRef.current) {
@@ -175,7 +179,11 @@ export function useP2PTransferController() {
     signalingService.leaveRoom();
     resetTransferRuntimeState();
     senderFilesRef.current = [];
+    roomCreationRoleRef.current = null;
+    roomCodeTakenRetriesRef.current = 0;
+    activeRoomCodeRef.current = '';
     setRoomCode('');
+    setReceiveMode(null);
     setReceivedFiles([]);
     setTransferState({
       status: 'idle',
@@ -294,21 +302,36 @@ export function useP2PTransferController() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    let retryTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
     const connectToSignaling = async () => {
       try {
         await new Promise(resolve => setTimeout(resolve, 500));
+        if (cancelled) return;
         await attemptSignalingConnect();
       } catch (error) {
+        if (cancelled) return;
         setIsConnected(false);
         setSignalingError(error instanceof Error ? error.message : 'Unable to connect');
 
-        setTimeout(() => {
-          void connectToSignaling();
+        retryTimeoutId = setTimeout(() => {
+          if (!cancelled) {
+            void connectToSignaling();
+          }
         }, 2000);
       }
     };
 
     void connectToSignaling();
+
+    signalingService.onJoinError((data) => {
+      if (data.event !== 'join-room' || !transferSessionActiveRef.current || transferFinalizedRef.current) {
+        return;
+      }
+      const message = 'Unable to join this room. This link may have expired \u2014 ask for a new link or QR code.';
+      finalizeTransfer('error', message, message);
+    });
 
     signalingService.onRoomFull((data) => {
       if (!transferSessionActiveRef.current || transferFinalizedRef.current) {
@@ -324,6 +347,33 @@ export function useP2PTransferController() {
       }
       const message = `Room ${data.room} is currently busy with another transfer.`;
       finalizeTransfer('error', message, 'Room is busy.');
+    });
+
+    signalingService.onRoomCodeTaken(() => {
+      const role = roomCreationRoleRef.current;
+      if (!role) return;
+
+      roomCodeTakenRetriesRef.current += 1;
+      if (roomCodeTakenRetriesRef.current > 5) {
+        const message = 'Could not generate a share code right now. Please try again.';
+        finalizeTransfer('error', message, message);
+        return;
+      }
+
+      const newCode = generateRoomCode();
+      activeRoomCodeRef.current = newCode;
+      setRoomCode(newCode);
+
+      const currentUrl = new URL(window.location.href);
+      const paramName = role === 'sender' ? 'sharing' : 'receive';
+      currentUrl.searchParams.set(paramName, newCode);
+      window.history.replaceState(
+        { [role === 'sender' ? 'sharing' : 'receiving']: true, roomCode: newCode },
+        '',
+        currentUrl.toString(),
+      );
+
+      void signalingService.createRoom(newCode, { role });
     });
 
     signalingService.onRoomExpired(() => {
@@ -374,12 +424,24 @@ export function useP2PTransferController() {
     });
 
     return () => {
+      cancelled = true;
+      if (retryTimeoutId) {
+        clearTimeout(retryTimeoutId);
+      }
       webrtcService.cleanup();
       signalingService.disconnect();
     };
   }, [attemptSignalingConnect, finalizeTransfer, markTransferStarted]);
 
   useEffect(() => {
+    // Correct the deterministic SSR default with the real browser state once
+    // mounted — reading navigator.onLine synchronously during initial render
+    // can diverge from the server (some Node versions expose a partial
+    // `navigator` global without `.onLine`), which trips a hydration mismatch.
+    if (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean') {
+      setIsOnline(navigator.onLine);
+    }
+
     const handleOffline = () => {
       setIsOnline(false);
       setIsConnected(false);
@@ -689,7 +751,7 @@ export function useP2PTransferController() {
     notifyOnce(`file-local-cancel-${fileIndex}`, 'info', `File "${file.name}" cancelled.`);
   }, [notifyOnce, transferState.files, transferState.progress]);
 
-  const handleSendFiles = useCallback(async (files: File[]) => {
+  const handleSendFiles = useCallback(async (files: File[], invitedRoomCode?: string) => {
     senderFilesRef.current = files;
 
     if (!isConnected) {
@@ -699,7 +761,8 @@ export function useP2PTransferController() {
     beginTransferSession();
     setReceivedFiles([]);
 
-    const code = generateRoomCode();
+    const code = invitedRoomCode || generateRoomCode();
+    activeRoomCodeRef.current = code;
     setRoomCode(code);
     setHasNavigatedToSharing(true);
 
@@ -723,6 +786,15 @@ export function useP2PTransferController() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     try {
+      if (invitedRoomCode) {
+        // Scanned a receiver's QR — that room already exists, so join it.
+        roomCreationRoleRef.current = null;
+        notifyOnce('peer-connected', 'success', 'Receiver invite accepted. Starting transfer...');
+        await signalingService.joinRoom(code, { role: 'sender' });
+        await webrtcService.initializeAsSender(code, files);
+        return;
+      }
+
       let senderInitialized = false;
       signalingService.onPeerJoined(async () => {
         if (senderInitialized || transferFinalizedRef.current) {
@@ -732,17 +804,58 @@ export function useP2PTransferController() {
 
         notifyOnce('peer-connected', 'success', 'Receiver connected. Starting transfer...');
         try {
-          await webrtcService.initializeAsSender(code, files);
+          await webrtcService.initializeAsSender(activeRoomCodeRef.current, files);
         } catch {
           const message = 'Failed to establish sender connection. Please retry.';
           finalizeTransfer('error', message, message);
         }
       });
 
-      signalingService.joinRoom(code, { role: 'sender' });
+      // No code was handed to us — we're the one generating it, so create the room.
+      roomCreationRoleRef.current = 'sender';
+      roomCodeTakenRetriesRef.current = 0;
+      void signalingService.createRoom(code, { role: 'sender' });
 
     } catch {
       const message = 'Failed to start file sharing. Please try again.';
+      finalizeTransfer('error', message, message);
+    }
+  }, [beginTransferSession, finalizeTransfer, isConnected, notifyOnce]);
+
+  const handlePrepareReceive = useCallback(async () => {
+    if (!isConnected || transferSessionActiveRef.current) {
+      return;
+    }
+
+    beginTransferSession();
+    setReceivedFiles([]);
+
+    const code = generateRoomCode();
+    activeRoomCodeRef.current = code;
+    setRoomCode(code);
+    setReceiveMode('qr');
+    setHasNavigatedToSharing(true);
+    setTransferState({
+      status: 'connecting',
+      files: [],
+      progress: [],
+      error: undefined,
+    });
+
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('receive', code);
+    window.history.pushState({ receiving: true, roomCode: code }, '', currentUrl.toString());
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    try {
+      // We're generating this code, so we create the room.
+      roomCreationRoleRef.current = 'receiver';
+      roomCodeTakenRetriesRef.current = 0;
+      await signalingService.createRoom(code, { role: 'receiver' });
+      await webrtcService.initializeAsReceiver(code);
+      notifyOnce('receiver-ready', 'info', 'Receiver QR is ready. Waiting for sender...');
+    } catch {
+      const message = 'Failed to create the receiving session. Please retry.';
       finalizeTransfer('error', message, message);
     }
   }, [beginTransferSession, finalizeTransfer, isConnected, notifyOnce]);
@@ -756,6 +869,9 @@ export function useP2PTransferController() {
     setReceivedFiles([]);
 
     setRoomCode(code);
+    activeRoomCodeRef.current = code;
+    roomCreationRoleRef.current = null;
+    setReceiveMode('code');
     setHasNavigatedToSharing(true);
 
     const currentUrl = new URL(window.location.href);
@@ -772,11 +888,12 @@ export function useP2PTransferController() {
     });
 
     try {
-      signalingService.joinRoom(code, { role: 'receiver' });
+      // Someone else's code — that room should already exist, so join it.
+      await signalingService.joinRoom(code, { role: 'receiver' });
       await webrtcService.initializeAsReceiver(code);
       notifyOnce('receiver-joined', 'info', 'Joined room. Waiting for sender...');
     } catch {
-      const message = 'Failed to join the file sharing session. Check the room code and retry.';
+        const message = 'Failed to join the file sharing session. Check the code and try again.';
       finalizeTransfer('error', message, message);
     }
   }, [beginTransferSession, finalizeTransfer, isConnected, notifyOnce]);
@@ -803,6 +920,7 @@ export function useP2PTransferController() {
           setReceivedFiles([]);
 
           const code = generateRoomCode();
+          activeRoomCodeRef.current = code;
           setRoomCode(code);
           setHasNavigatedToSharing(true);
 
@@ -834,14 +952,16 @@ export function useP2PTransferController() {
 
             notifyOnce('peer-connected', 'success', 'Receiver connected. Starting transfer...');
             try {
-              await webrtcService.initializeAsSender(code, files);
+              await webrtcService.initializeAsSender(activeRoomCodeRef.current, files);
             } catch {
               const message = 'Failed to establish sender connection. Please retry.';
               finalizeTransfer('error', message, message);
             }
           });
 
-          signalingService.joinRoom(code, { role: 'sender' });
+          roomCreationRoleRef.current = 'sender';
+          roomCodeTakenRetriesRef.current = 0;
+          void signalingService.createRoom(code, { role: 'sender' });
           notifyOnce('retry-new-room', 'info', 'New room code created. Share this code with receiver.');
         } catch {
           const message = 'Could not create a new room. Please retry.';
@@ -873,9 +993,11 @@ export function useP2PTransferController() {
     transferStartedAt,
     transferEndedAt,
     roomCode,
+    receiveMode,
     receivedFiles,
     handleRetrySignaling,
     handleSendFiles,
+    handlePrepareReceive,
     handleReceiveFiles,
     handleCancelTransfer,
     handleReset,

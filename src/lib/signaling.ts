@@ -7,6 +7,21 @@ export interface AdaptiveTransferSettings {
   delay: number;
 }
 
+interface TurnServerPayload {
+  servers?: unknown;
+  adaptiveSettings?: unknown;
+}
+
+interface RoomActionOptions {
+  role?: 'sender' | 'receiver';
+  networkInfo?: { type?: string };
+}
+
+interface RoomActionAcknowledgement extends TurnServerPayload {
+  ok?: boolean;
+  error?: string;
+}
+
 class SignalingService {
   private socket: Socket | null = null;
   private serverUrl: string = '';
@@ -173,6 +188,83 @@ class SignalingService {
     }
   }
 
+  private applyTurnServerPayload(data?: TurnServerPayload | null): void {
+    this.updateDynamicIceServers(data?.servers);
+    this.updateAdaptiveSettings(data?.adaptiveSettings);
+  }
+
+  private emitRoomAction(
+    eventName: 'create-room' | 'join-room',
+    roomCode: string,
+    options?: RoomActionOptions,
+  ): Promise<void> {
+    if (!this.socket) {
+      return Promise.reject(new Error('Signaling socket is not connected'));
+    }
+
+    const socket = this.socket;
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        socket.off('turn-servers', handleTurnServers);
+      };
+
+      const settleSuccess = (payload?: TurnServerPayload | null) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        cleanup();
+        this.applyTurnServerPayload(payload);
+        resolve();
+      };
+
+      const settleError = (message: string) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        cleanup();
+        reject(new Error(message));
+      };
+
+      const handleTurnServers = (payload: TurnServerPayload) => {
+        settleSuccess(payload);
+      };
+
+      const timeoutId = setTimeout(() => {
+        settleError(`Timed out waiting for ICE configuration after ${eventName}`);
+      }, 5000);
+
+      socket.on('turn-servers', handleTurnServers);
+      socket.emit(
+        eventName,
+        {
+          roomId: roomCode,
+          role: options?.role,
+          networkInfo: options?.networkInfo,
+        },
+        (response?: RoomActionAcknowledgement) => {
+          if (!response) {
+            return;
+          }
+
+          if (response.ok === false) {
+            settleError(response.error || `${eventName} was rejected`);
+            return;
+          }
+
+          settleSuccess(response);
+        },
+      );
+    });
+  }
+
   connect(serverUrl?: string): Promise<Socket> {
     return new Promise((resolve, reject) => {
       // If already connected, resolve with existing socket
@@ -205,7 +297,8 @@ class SignalingService {
         } else if (hostname === 'localhost' || hostname === '127.0.0.1') {
           this.serverUrl = 'http://localhost:3001';
         } else {
-          // Use the same IP/hostname but port 3003 for local network
+          // Use the same IP/hostname but port 3001 for local network
+          // (matches the signaling server's default PORT, see signaling-server.js)
           this.serverUrl = `${protocol}//${hostname}:3001`;
         }
       }
@@ -224,8 +317,7 @@ class SignalingService {
       });
 
       this.socket.on('turn-servers', (data: { servers?: unknown; adaptiveSettings?: unknown }) => {
-        this.updateDynamicIceServers(data?.servers);
-        this.updateAdaptiveSettings(data?.adaptiveSettings);
+        this.applyTurnServerPayload(data);
         const relayServerCount = this.dynamicIceServers.filter(
           (server) =>
             typeof server.username === 'string' &&
@@ -287,23 +379,16 @@ class SignalingService {
     this.adaptiveSettingsListener = null;
   }
 
-  joinRoom(
-    roomCode: string,
-    options?: {
-      role?: 'sender' | 'receiver';
-      networkInfo?: { type?: string };
-    },
-  ): void {
-    if (this.socket) {
-      const payload = options
-        ? {
-            roomId: roomCode,
-            role: options.role,
-            networkInfo: options.networkInfo,
-          }
-        : roomCode;
-      this.socket.emit('join-room', payload);
-    }
+  // Called by whichever side generates the code — this is what makes the
+  // room exist on the server in the first place.
+  createRoom(roomCode: string, options?: RoomActionOptions): Promise<void> {
+    return this.emitRoomAction('create-room', roomCode, options);
+  }
+
+  // Called by whichever side is entering a code someone else shared with
+  // them — this only succeeds if that room already exists and is live.
+  joinRoom(roomCode: string, options?: RoomActionOptions): Promise<void> {
+    return this.emitRoomAction('join-room', roomCode, options);
   }
 
   leaveRoom(): void {
@@ -390,6 +475,13 @@ class SignalingService {
     }
   }
 
+  onJoinError(callback: (data: { event?: string; message?: string }) => void): void {
+    if (this.socket) {
+      this.socket.off('request-invalid');
+      this.socket.on('request-invalid', callback);
+    }
+  }
+
   onRoomFull(callback: (data: { room: string }) => void): void {
     if (this.socket) {
       this.socket.off('room-full');
@@ -408,6 +500,15 @@ class SignalingService {
     if (this.socket) {
       this.socket.off('room-expired');
       this.socket.on('room-expired', callback);
+    }
+  }
+
+  // Fires on the ~1-in-10,000 chance a freshly generated code collides with
+  // one that's already live — the caller should generate a new code and retry.
+  onRoomCodeTaken(callback: (data: { room: string }) => void): void {
+    if (this.socket) {
+      this.socket.off('room-code-taken');
+      this.socket.on('room-code-taken', callback);
     }
   }
 
@@ -522,6 +623,7 @@ class SignalingService {
     if (this.socket) {
       this.socket.off('webrtc-offer');
       this.socket.off('webrtc-answer');
+      this.socket.off('request-invalid');
       this.socket.off('webrtc-ice-candidate');
       this.socket.off('peer-joined');
       this.socket.off('peer-disconnected');

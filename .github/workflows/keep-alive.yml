@@ -13,7 +13,7 @@ jobs:
     - name: Ping signaling server
       run: |
         echo "Pinging signaling server..."
-        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://signaling-server-6ziv.onrender.com)
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" api.transmitflow.fun)
         echo "Status: $HTTP_STATUS"
         if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 500 ]; then
           echo "Server is alive"

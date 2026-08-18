@@ -1,48 +1,96 @@
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * TransmitFlow design tokens — "airmail" identity.
+ * A direct transfer is a direct flight: no cloud sorting facility in
+ * between. Postal red + airmail navy stand in for "in transit" and
+ * "delivered." One signature: the diagonal red/navy stripe borrowed
+ * from an airmail envelope edge, used sparingly.
+ */
 :root {
-  --radius: 0.75rem;
-  --background: 220 20% 98%;
-  --foreground: 224 71% 4%;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --font-display: 'Space Grotesk', var(--font-sans);
+
+  --radius: 0.5rem;
+
+  --background: 200 14% 96%;   /* manifest paper — cool, not cream */
+  --foreground: 222 45% 13%;   /* airmail ink */
+
   --card: 0 0% 100%;
-  --card-foreground: 224 71% 4%;
+  --card-foreground: 222 45% 13%;
+
   --popover: 0 0% 100%;
-  --popover-foreground: 224 71% 4%;
-  --primary: 243 75% 59%;
+  --popover-foreground: 222 45% 13%;
+
+  --primary: 5 72% 45%;        /* postal red */
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 220 9% 46%;
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 9% 46%;
-  --accent: 243 75% 59%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 84% 60%;
-  --border: 220 13% 91%;
-  --input: 220 13% 91%;
-  --ring: 243 75% 59%;
+
+  --secondary: 213 45% 24%;    /* airmail navy, used as second accent */
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 200 16% 91%;
+  --muted-foreground: 215 15% 40%;
+
+  --accent: 200 16% 91%;
+  --accent-foreground: 222 45% 13%;
+
+  --destructive: 5 72% 40%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 205 14% 85%;
+  --input: 205 14% 85%;
+  --ring: 5 72% 45%;
+
+  --stripe-a: 5 72% 45%;       /* red */
+  --stripe-b: 213 45% 24%;     /* navy */
 }
 
 .dark {
-  --background: 224 71% 4%;
-  --foreground: 210 20% 98%;
-  --card: 224 50% 7%;
-  --card-foreground: 210 20% 98%;
-  --popover: 224 50% 7%;
-  --popover-foreground: 210 20% 98%;
-  --primary: 243 75% 59%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 224 40% 13%;
-  --secondary-foreground: 210 20% 98%;
-  --muted: 224 40% 13%;
-  --muted-foreground: 220 9% 58%;
-  --accent: 243 75% 59%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 63% 31%;
-  --border: 224 30% 14%;
-  --input: 224 30% 14%;
-  --ring: 243 75% 59%;
+  --background: 222 38% 7%;
+  --foreground: 205 22% 92%;
+
+  --card: 222 32% 10%;
+  --card-foreground: 205 22% 92%;
+
+  --popover: 222 32% 10%;
+  --popover-foreground: 205 22% 92%;
+
+  --primary: 6 82% 58%;
+  --primary-foreground: 222 38% 7%;
+
+  --secondary: 213 55% 62%;
+  --secondary-foreground: 222 38% 7%;
+
+  --muted: 222 22% 15%;
+  --muted-foreground: 210 12% 62%;
+
+  --accent: 222 22% 15%;
+  --accent-foreground: 205 22% 92%;
+
+  --destructive: 6 70% 45%;
+  --destructive-foreground: 205 22% 92%;
+
+  --border: 222 20% 18%;
+  --input: 222 20% 18%;
+  --ring: 6 82% 58%;
+
+  --stripe-a: 6 82% 58%;
+  --stripe-b: 213 55% 62%;
 }
 
 /* Disable default crossfade so only the circle animation plays */
@@ -58,96 +106,75 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
   }
 }
 
-/* ─── Gradient text ─── */
 @layer utilities {
-  .text-gradient {
-    display: inline-block;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
-    padding-right: 0.04em;
-    background-image: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+  .font-mono {
+    font-family: var(--font-mono);
   }
-
+  .font-display {
+    font-family: var(--font-display);
+  }
   .slashed-zero {
     font-variant-numeric: slashed-zero;
     font-feature-settings: "zero" 1;
   }
 }
 
-/* ─── Dot grid pattern ─── */
-.dot-pattern {
-  background-image: radial-gradient(hsl(var(--foreground) / 0.07) 1px, transparent 1px);
-  background-size: 22px 22px;
-}
-.dark .dot-pattern {
-  background-image: radial-gradient(hsl(var(--foreground) / 0.04) 1px, transparent 1px);
+/* ─── Airmail stripe — the one signature element. Use sparingly. ─── */
+.airmail-stripe {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    hsl(var(--stripe-a)) 0,
+    hsl(var(--stripe-a)) 10px,
+    transparent 10px,
+    transparent 14px,
+    hsl(var(--stripe-b)) 14px,
+    hsl(var(--stripe-b)) 24px,
+    transparent 24px,
+    transparent 28px
+  );
 }
 
-/* ─── Background blobs ─── */
-@keyframes blob-drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(30px, -40px) scale(1.03); }
-  50% { transform: translate(-15px, 20px) scale(0.97); }
-  75% { transform: translate(20px, 15px) scale(1.02); }
+/* ─── Postmark — a hand-stamped circle for status + step markers ─── */
+.postmark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1.5px solid currentColor;
 }
-.blob {
-  animation: blob-drift 25s ease-in-out infinite;
-  border-radius: 50%;
-  filter: blur(90px);
+.postmark::before {
+  content: "";
   position: absolute;
-  pointer-events: none;
-}
-.blob-1 { animation-delay: 0s; }
-.blob-2 { animation-delay: -8s; }
-.blob-3 { animation-delay: -16s; }
-
-/* ─── Glow pulse (active transfers) ─── */
-@keyframes glow-pulse {
-  0%, 100% { opacity: 0.15; }
-  50% { opacity: 0.3; }
-}
-.animate-glow-pulse {
-  animation: glow-pulse 2.5s ease-in-out infinite;
+  inset: 3px;
+  border-radius: 9999px;
+  border: 1px dashed currentColor;
+  opacity: 0.5;
 }
 
 @keyframes tab-slide-left {
-  0% {
-    opacity: 0;
-    transform: translateX(14px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  0% { opacity: 0; transform: translateX(14px); }
+  100% { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes tab-slide-right {
-  0% {
-    opacity: 0;
-    transform: translateX(-14px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  0% { opacity: 0; transform: translateX(-14px); }
+  100% { opacity: 1; transform: translateX(0); }
 }
 
 .animate-tab-slide-left {
-  animation: tab-slide-left 460ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: tab-slide-left 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .animate-tab-slide-right {
-  animation: tab-slide-right 460ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: tab-slide-right 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .blob,
-  .animate-glow-pulse,
   .animate-tab-slide-left,
   .animate-tab-slide-right,
   .animate-in,

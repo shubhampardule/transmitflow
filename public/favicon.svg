@@ -1,11 +1,14 @@
 <svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-        <linearGradient id="transmitGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#6366F1" />
-            <stop offset="50%" stop-color="#A855F7" />
-            <stop offset="100%" stop-color="#EC4899" />
-        </linearGradient>
-    </defs>
-    <circle cx="58" cy="55" r="28" fill="url(#transmitGradient)" />
-    <circle cx="24" cy="24" r="14" fill="url(#transmitGradient)" />
+  <style>
+    .node { fill: #121B30; }
+    .dot { fill: #C52E20; }
+    @media (prefers-color-scheme: dark) {
+      .node { fill: #E6EBEF; }
+      .dot { fill: #EC4E3C; }
+    }
+  </style>
+  <circle class="dot" cx="47" cy="53" r="2.75" />
+  <circle class="dot" cx="53" cy="47" r="2.75" />
+  <rect class="node" x="14" y="56" width="28" height="28" rx="4" />
+  <rect class="node" x="58" y="16" width="28" height="28" rx="4" />
 </svg>

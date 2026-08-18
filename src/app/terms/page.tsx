@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function TermsPage() {
   return (
     <main className="mx-auto w-full max-w-4xl px-4 md:px-6 py-10 md:py-14">
-      <div className="rounded-2xl border border-border bg-card p-6 md:p-8">
+      <div className="rounded-md border border-border bg-card p-6 md:p-8">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Terms of Use</h1>
         <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
           By using TransmitFlow, you agree to these terms. If you do not agree, please do not use the service.
@@ -51,13 +51,13 @@ export default function TermsPage() {
         </section>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <Link href="/" className="inline-flex rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
+          <Link href="/" className="inline-flex rounded-md border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
             Back to TransmitFlow
           </Link>
-          <Link href="/privacy" className="inline-flex rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
+          <Link href="/privacy" className="inline-flex rounded-md border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
             Privacy Policy
           </Link>
-          <Link href="/contact" className="inline-flex rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
+          <Link href="/contact" className="inline-flex rounded-md border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
             Contact
           </Link>
         </div>

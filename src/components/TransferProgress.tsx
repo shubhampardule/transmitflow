@@ -34,6 +34,7 @@ interface TransferProgressProps {
   onReset: () => void;
   onCancelFile?: (fileIndex: number) => void;
   role?: 'send' | 'receive'; // Add role prop to properly determine if user is receiver
+  receiveMode?: 'qr' | 'code' | null; // Only show the invite/QR card when the receiver generated the code themselves
   onRetry?: () => void;
   onBackToSend?: () => void;
   onBackToReceive?: () => void;
@@ -49,13 +50,24 @@ export default function TransferProgress({
   onReset,
   onCancelFile,
   role,
+  receiveMode,
   onRetry,
   onBackToSend,
   onBackToReceive,
 }: TransferProgressProps) {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
-  const [showQrCode, setShowQrCode] = useState(true);
+  const [showQrCode, setShowQrCode] = useState(() => {
+    if (role === 'receive' || typeof window === 'undefined') {
+      return true;
+    }
+    return window.matchMedia('(min-width: 640px)').matches;
+  });
   const isReceiver = role === 'receive'; // Fix: Use role prop instead of receivedFiles.length
+  // Only show the "here's my code" invite/QR card when this receiver generated
+  // the code themselves. If they typed in someone else's code, there's nothing
+  // of theirs to invite anyone to — showing it here was flashing on screen
+  // during the brief 'connecting' window before pairing completed.
+  const showReceiverInvite = isReceiver && receiveMode !== 'code';
 
   const isMobileShareSupported = () => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') {
@@ -74,18 +86,13 @@ export default function TransferProgress({
     return hasCoarsePointer || isMobileUserAgent;
   };
   
-  // Generate QR code when room code is available - ONLY for senders, never for receivers
+  // Generate the secure share QR for either role. The payload is the same room/token link.
   useEffect(() => {
-    if (roomCode && !isReceiver && role === 'send') {
-      // Default to hiding QR on small screens to avoid forcing scroll.
-      if (typeof window !== 'undefined') {
-        setShowQrCode(window.matchMedia('(min-width: 640px)').matches);
-      } else {
-        setShowQrCode(true);
-      }
+    if (roomCode && (role === 'send' || role === 'receive')) {
+      // Receiver QR stays visible on every viewport; sender QR remains compact on mobile.
       const generateQR = async () => {
         try {
-          const shareUrl = `${window.location.origin}${window.location.pathname}?receive=${roomCode}`;
+          const shareUrl = `${window.location.origin}${window.location.pathname}?receive=${encodeURIComponent(roomCode)}`;
           const url = await QRCode.toDataURL(shareUrl, {
             width: 200,
             margin: 2,
@@ -108,11 +115,11 @@ export default function TransferProgress({
       // Try modern clipboard API first
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(roomCode);
-        toast.success('Room code copied to clipboard!');
+        toast.success('Pairing code copied to clipboard!');
       } else {
         // Fallback for mobile/older browsers
         copyToClipboardFallback(roomCode);
-        toast.success('Room code copied to clipboard!');
+        toast.success('Pairing code copied to clipboard!');
       }
     } catch {
       // If clipboard API fails, use fallback
@@ -122,7 +129,7 @@ export default function TransferProgress({
   };
 
   const copyShareLink = async () => {
-    const shareUrl = `${window.location.origin}${window.location.pathname}?receive=${roomCode}`;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?receive=${encodeURIComponent(roomCode)}`;
     try {
       if (isMobileShareSupported()) {
         await navigator.share({
@@ -191,28 +198,28 @@ export default function TransferProgress({
     switch (transferState.status) {
       case 'idle':
         return {
-          icon: <XCircle className="h-6 w-6 text-gray-400" />,
+          icon: <XCircle className="h-6 w-6 text-muted-foreground" />,
           title: 'Ready to Transfer',
           description: 'Waiting for connection',
           color: 'gray'
         };
       case 'connecting':
         return {
-          icon: <Loader2 className="h-6 w-6 animate-spin motion-reduce:animate-none text-blue-500" />,
+          icon: <Loader2 className="h-6 w-6 animate-spin motion-reduce:animate-none text-primary" />,
           title: 'Connecting...',
           description: 'Establishing peer-to-peer connection',
           color: 'blue'
         };
       case 'transferring':
         return {
-          icon: <Loader2 className="h-6 w-6 animate-spin motion-reduce:animate-none text-purple-500" />,
+          icon: <Loader2 className="h-6 w-6 animate-spin motion-reduce:animate-none text-primary" />,
           title: 'Transferring Files',
           description: 'Transfer in progress...',
           color: 'purple'
         };
       case 'completed':
         return {
-          icon: <CheckCircle className="h-6 w-6 text-green-500" />,
+          icon: <CheckCircle className="h-6 w-6 text-emerald-500" />,
           title: 'Transfer Complete!',
           description: 'All files transferred successfully',
           color: 'green'
@@ -226,14 +233,14 @@ export default function TransferProgress({
         };
       case 'error':
         return {
-          icon: <XCircle className="h-6 w-6 text-red-500" />,
+          icon: <XCircle className="h-6 w-6 text-destructive" />,
           title: 'Transfer Failed',
           description: transferState.error || 'An error occurred during transfer',
           color: 'red'
         };
       default:
         return {
-          icon: <XCircle className="h-6 w-6 text-gray-400" />,
+          icon: <XCircle className="h-6 w-6 text-muted-foreground" />,
           title: 'Unknown Status',
           description: 'Please try again',
           color: 'gray'
@@ -319,44 +326,69 @@ export default function TransferProgress({
     ? 'No integrity mismatch reported'
     : 'Not fully verified (transfer cancelled)';
 
+  const summaryTiles: Array<{ label: string; value: string }> = [
+    { label: 'TOTAL SIZE', value: formatFileSize(summaryTotalBytes) },
+    { label: 'ELAPSED TIME', value: summaryDurationSeconds ? formatTime(summaryDurationSeconds) : '—' },
+    { label: 'AVG SPEED', value: summaryAverageSpeed ? `${formatFileSize(summaryAverageSpeed)}/s` : '—' },
+    {
+      label: 'FILES',
+      value: `${summaryCompletedCount}/${transferState.files.length}${summaryCancelledCount > 0 ? ` (${summaryCancelledCount} cancelled)` : ''}`,
+    },
+  ];
+
   return (
     <>
       <div className="space-y-6">
       {/* Room Code - Only show during initial connection phase */}
       {(transferState.status === 'idle' || transferState.status === 'connecting') && (
         <>
-          {/* Receiver: show minimal room info (no share actions) */}
-          {isReceiver ? (
-            <div className="rounded-xl border border-border p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          {/* Receiver: show the secure invite QR and a manual fallback (only when they generated this code themselves). */}
+          {showReceiverInvite ? (
+            <div className="rounded-md border border-border p-4">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Room</h3>
+                  <h3 className="font-mono text-[11px] tracking-widest text-muted-foreground">RECEIVER INVITE</h3>
                   <p className="mt-1 text-xl font-mono slashed-zero font-bold tracking-[0.25em]">{roomCode}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Show this QR to the sender, then wait for the connection.</p>
                 </div>
                 {onBackToReceive ? (
-                  <Button onClick={onBackToReceive} variant="outline" size="sm" className="rounded-lg">
-                    Change code
+                  <Button onClick={onBackToReceive} variant="outline" size="sm">
+                    New invite
                   </Button>
                 ) : null}
               </div>
+              {qrCodeUrl ? (
+                <div className="mt-4 border-t border-border pt-4">
+                  <div className="flex justify-center">
+                    <Image
+                      src={qrCodeUrl}
+                      alt="QR Code for the receiver invite"
+                      width={220}
+                      height={220}
+                      className="rounded-md border border-border bg-white"
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground text-center">Sender: scan this code after selecting files.</p>
+                </div>
+              ) : null}
             </div>
-          ) : (
+          ) : isReceiver ? null : (
             <>
               {/* Mobile: compact, QR collapsible to avoid scroll */}
-              <div className="sm:hidden rounded-xl border border-border p-4">
+              <div className="sm:hidden rounded-md border border-border p-4">
                 <div className="space-y-3">
                   <div className="text-center">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Room Code</h3>
+                    <h3 className="font-mono text-[11px] tracking-widest text-muted-foreground">ROOM CODE</h3>
                     <p className="mt-1 text-2xl font-mono slashed-zero font-bold tracking-[0.3em]">{roomCode}</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <Button onClick={copyRoomCode} variant="outline" size="sm" className="rounded-lg">
-                      <Copy className="h-4 w-4 mr-2" />
+                    <Button onClick={copyRoomCode} variant="outline" size="sm">
+                      <Copy className="h-4 w-4" />
                       Copy code
                     </Button>
-                    <Button onClick={copyShareLink} variant="outline" size="sm" className="rounded-lg">
-                      <Link2 className="h-4 w-4 mr-2" />
+                    <Button onClick={copyShareLink} variant="outline" size="sm">
+                      <Link2 className="h-4 w-4" />
                       {linkActionLabel}
                     </Button>
                     {!isReceiver && role === 'send' && qrCodeUrl ? (
@@ -364,24 +396,24 @@ export default function TransferProgress({
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="rounded-lg col-span-2"
+                        className="col-span-2"
                         onClick={() => setShowQrCode((prev) => !prev)}
                       >
-                        <QrCode className="h-4 w-4 mr-2" />
+                        <QrCode className="h-4 w-4" />
                         {showQrCode ? 'Hide QR' : 'Show QR'}
                       </Button>
                     ) : null}
                   </div>
 
                   {!isReceiver && role === 'send' && qrCodeUrl && showQrCode ? (
-                    <div className="pt-3 border-t border-border/60">
+                    <div className="pt-3 border-t border-border">
                       <div className="flex justify-center">
                         <Image
                           src={qrCodeUrl}
                           alt="QR Code for sharing"
                           width={170}
                           height={170}
-                          className="rounded-xl border border-border bg-white"
+                          className="rounded-md border border-border bg-white"
                         />
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground text-center">
@@ -399,19 +431,19 @@ export default function TransferProgress({
               </div>
 
               {/* Desktop: restore the previous split cards layout */}
-              <div className="hidden sm:block rounded-xl border border-border p-4">
+              <div className="hidden sm:block rounded-md border border-border p-4">
                 <div className="flex items-center justify-between h-12">
                   <div className="flex flex-col justify-center h-full">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Room Code</h3>
+                    <h3 className="font-mono text-[11px] tracking-widest text-muted-foreground">ROOM CODE</h3>
                     <p className="text-2xl font-mono slashed-zero font-bold tracking-[0.3em]">{roomCode}</p>
                   </div>
                   <div className="flex gap-2 flex-wrap">
-                    <Button onClick={copyRoomCode} variant="outline" size="sm" className="rounded-lg">
-                      <Copy className="h-4 w-4 mr-2" />
+                    <Button onClick={copyRoomCode} variant="outline" size="sm">
+                      <Copy className="h-4 w-4" />
                       Copy code
                     </Button>
-                    <Button onClick={copyShareLink} variant="outline" size="sm" className="rounded-lg">
-                      <Link2 className="h-4 w-4 mr-2" />
+                    <Button onClick={copyShareLink} variant="outline" size="sm">
+                      <Link2 className="h-4 w-4" />
                       {linkActionLabel}
                     </Button>
                   </div>
@@ -420,16 +452,16 @@ export default function TransferProgress({
 
               {/* Desktop QR: separate card like before (senders only) */}
               {!isReceiver && role === 'send' && qrCodeUrl && (
-                <div className="hidden sm:block rounded-xl border border-border p-6">
+                <div className="hidden sm:block rounded-md border border-border p-6">
                   <div className="flex flex-col items-center space-y-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">QR Code</h3>
+                    <h3 className="font-mono text-[11px] tracking-widest text-muted-foreground">QR CODE</h3>
                     <div className="flex flex-col items-center space-y-4">
                       <Image
                         src={qrCodeUrl}
                         alt="QR Code for sharing"
                         width={200}
                         height={200}
-                        className="rounded-xl border border-border"
+                        className="rounded-md border border-border"
                       />
                       <p className="text-sm text-muted-foreground text-center">
                         Scan with receiver&apos;s device to connect
@@ -444,7 +476,7 @@ export default function TransferProgress({
       )}
 
       {/* Status */}
-      <div className="rounded-xl border border-border p-4">
+      <div className="rounded-md border border-border p-4">
           <div className="flex items-start gap-3 sm:gap-4">
             <div className="flex-shrink-0">
               {statusInfo.icon}
@@ -465,9 +497,9 @@ export default function TransferProgress({
 
       {/* File Transfer Queue */}
       {transferState.files.length > 0 && (
-        <div data-transfer-card className="rounded-xl border border-border">
+        <div data-transfer-card className="rounded-md border border-border">
           <div className="flex items-center justify-between p-4 border-b border-border">
-            <span className="font-semibold">File Transfer</span>
+            <span className="font-mono text-xs tracking-widest text-muted-foreground">FILE TRANSFER</span>
             <Badge variant="secondary">
               {transferState.files.length} files
             </Badge>
@@ -497,11 +529,13 @@ export default function TransferProgress({
                 const cancelButtonTitle = isActiveFile ? 'Cancel file transfer' : 'Remove from queue';
                 
                 return (
-                    <div key={index} data-file-item className="border border-border rounded-xl p-4 space-y-3">
+                    <div key={index} data-file-item className="border border-border rounded-md p-4 space-y-3">
                     {/* File Info Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        {(() => { const Icon = getFileIcon(file.name, file.type); return <Icon className="h-5 w-5 text-muted-foreground flex-shrink-0" />; })()}
+                        <div className="flex-shrink-0 h-8 w-8 rounded-md border border-border flex items-center justify-center text-muted-foreground">
+                          {(() => { const Icon = getFileIcon(file.name, file.type); return <Icon className="h-4 w-4" />; })()}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium truncate">{file.name}</div>
                           <div className="text-sm text-muted-foreground">
@@ -525,7 +559,7 @@ export default function TransferProgress({
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {/* Speed and ETA for current file - only show during transfer stage */}
                         {showTransferMetrics && progress && (
-                          <div className="hidden sm:block text-right text-xs text-muted-foreground mr-2">
+                          <div className="hidden sm:block text-right font-mono text-xs text-muted-foreground mr-2">
                             <div>
                               {progress.speed && progress.speed > 0 
                                 ? `Avg ${formatFileSize(progress.speed)}/s`
@@ -543,14 +577,14 @@ export default function TransferProgress({
                         {/* Status Icons and Buttons */}
                         {isCancelled ? (
                           <div className="flex items-center gap-2">
-                            <XCircle className="h-5 w-5 text-red-500" />
+                            <XCircle className="h-5 w-5 text-destructive" />
                             <Badge variant="destructive" className="text-xs">
                               Cancelled by {progress?.cancelledBy}
                             </Badge>
                           </div>
                         ) : isFileComplete ? (
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="h-5 w-5 text-green-500" />
+                            <CheckCircle className="h-5 w-5 text-emerald-500" />
                             {/* Show download button immediately when individual file completes on receiver side */}
                             {isReceiver && (
                               <Button
@@ -579,9 +613,9 @@ export default function TransferProgress({
                         ) : isTransferring ? (
                           <div className="flex items-center gap-2">
                             {isActiveFile ? (
-                              <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none text-blue-500" />
+                              <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none text-primary" />
                             ) : (
-                              <div className="w-5 h-5 rounded-full bg-muted flex-shrink-0" />
+                              <div className="w-5 h-5 bg-muted flex-shrink-0" />
                             )}
                             {canCancelFile && (
                               <Button
@@ -596,7 +630,7 @@ export default function TransferProgress({
                             )}
                           </div>
                         ) : (
-                          <div className="w-5 h-5 rounded-full bg-muted flex-shrink-0" />
+                          <div className="w-5 h-5 bg-muted flex-shrink-0" />
                         )}
                       </div>
                     </div>
@@ -606,10 +640,9 @@ export default function TransferProgress({
                       <div className="space-y-1">
                         <Progress 
                           value={progress ? (progress.stage === 'converting' && progress.conversionProgress ? progress.conversionProgress : progress.progress) : (isCompleted ? 100 : 0)} 
-                          className={`h-2 ${progress?.stage === 'converting' ? '[&>div]:bg-orange-500' : ''}`}
                         />
                         {showTransferMetrics && progress && (
-                          <div className="sm:hidden flex items-center justify-between text-[11px] text-muted-foreground">
+                          <div className="sm:hidden flex items-center justify-between font-mono text-[11px] text-muted-foreground">
                             <span>
                               {progress.speed && progress.speed > 0
                                 ? `Avg ${formatFileSize(progress.speed)}/s`
@@ -622,7 +655,7 @@ export default function TransferProgress({
                             </span>
                           </div>
                         )}
-                        <div className="flex justify-between text-xs text-muted-foreground">
+                        <div className="flex justify-between font-mono text-xs text-muted-foreground">
                           <span>
                             {progress ? (
                               progress.stage === 'converting' && progress.conversionProgress ? 
@@ -645,49 +678,34 @@ export default function TransferProgress({
       )}
 
       {(isComplete || isCancelled) && transferState.files.length > 0 ? (
-        <div className="rounded-xl border border-border p-4">
+        <div className="rounded-md border border-border p-4">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="font-semibold">Transfer Summary</h4>
+            <h4 className="font-mono text-xs tracking-widest text-muted-foreground">TRANSFER SUMMARY</h4>
             <Badge variant={isComplete ? 'secondary' : 'outline'}>
               {isComplete ? 'Completed' : 'Cancelled'}
             </Badge>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
-              <div className="text-xs text-muted-foreground">Total size</div>
-              <div className="font-medium">{formatFileSize(summaryTotalBytes)}</div>
-            </div>
-            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
-              <div className="text-xs text-muted-foreground">Elapsed time</div>
-              <div className="font-medium">{summaryDurationSeconds ? formatTime(summaryDurationSeconds) : '—'}</div>
-            </div>
-            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
-              <div className="text-xs text-muted-foreground">Average speed</div>
-              <div className="font-medium">
-                {summaryAverageSpeed ? `${formatFileSize(summaryAverageSpeed)}/s` : '—'}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border">
+            {summaryTiles.map((tile) => (
+              <div key={tile.label} className="bg-background px-3.5 py-3">
+                <div className="font-mono text-[10px] tracking-widest text-muted-foreground">{tile.label}</div>
+                <div className="mt-1 font-mono text-sm font-medium text-foreground">{tile.value}</div>
               </div>
-            </div>
-            <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
-              <div className="text-xs text-muted-foreground">Files</div>
-              <div className="font-medium">
-                {summaryCompletedCount}/{transferState.files.length} completed
-                {summaryCancelledCount > 0 ? `, ${summaryCancelledCount} cancelled` : ''}
-              </div>
-            </div>
+            ))}
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-3 font-mono text-xs text-muted-foreground">
             Integrity status: {summaryIntegrityLabel}
           </p>
         </div>
       ) : null}
 
       {/* Action Buttons - Always visible */}
-      <div className="rounded-xl border border-border p-4">
+      <div className="rounded-md border border-border p-4">
         {hasError ? (
           <div className="flex flex-col sm:flex-row gap-3">
             {onRetry ? (
-              <Button onClick={onRetry} className="flex-1 rounded-xl">
-                <RotateCcw className="h-4 w-4 mr-2" />
+              <Button onClick={onRetry} className="flex-1">
+                <RotateCcw className="h-4 w-4" />
                 Retry
               </Button>
             ) : null}
@@ -695,19 +713,19 @@ export default function TransferProgress({
             {isReceiver ? (
               <>
                 {onBackToReceive ? (
-                  <Button onClick={onBackToReceive} variant="outline" className="flex-1 rounded-xl">
-                    <ArrowLeft className="h-4 w-4 mr-2" />
+                  <Button onClick={onBackToReceive} variant="outline" className="flex-1">
+                    <ArrowLeft className="h-4 w-4" />
                     Enter code again
                   </Button>
                 ) : (
-                  <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
-                    <ArrowLeft className="h-4 w-4 mr-2" />
+                  <Button onClick={onReset} variant="outline" className="flex-1">
+                    <ArrowLeft className="h-4 w-4" />
                     Back
                   </Button>
                 )}
 
                 {onBackToSend ? (
-                  <Button onClick={onBackToSend} variant="ghost" className="flex-1 rounded-xl">
+                  <Button onClick={onBackToSend} variant="ghost" className="flex-1">
                     Switch to Send
                   </Button>
                 ) : null}
@@ -715,19 +733,19 @@ export default function TransferProgress({
             ) : (
               <>
                 {onBackToSend ? (
-                  <Button onClick={onBackToSend} variant="outline" className="flex-1 rounded-xl">
-                    <RotateCcw className="h-4 w-4 mr-2" />
+                  <Button onClick={onBackToSend} variant="outline" className="flex-1">
+                    <RotateCcw className="h-4 w-4" />
                     New room
                   </Button>
                 ) : (
-                  <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
-                    <RotateCcw className="h-4 w-4 mr-2" />
+                  <Button onClick={onReset} variant="outline" className="flex-1">
+                    <RotateCcw className="h-4 w-4" />
                     New transfer
                   </Button>
                 )}
 
                 {onBackToReceive ? (
-                  <Button onClick={onBackToReceive} variant="ghost" className="flex-1 rounded-xl">
+                  <Button onClick={onBackToReceive} variant="ghost" className="flex-1">
                     Switch to Receive
                   </Button>
                 ) : null}
@@ -737,51 +755,51 @@ export default function TransferProgress({
         ) : transferState.status === 'connecting' ? (
           <div className="flex flex-col sm:flex-row gap-3">
             {isReceiver && onRetry ? (
-              <Button onClick={onRetry} className="flex-1 rounded-xl">
-                <RotateCcw className="h-4 w-4 mr-2" />
+              <Button onClick={onRetry} className="flex-1">
+                <RotateCcw className="h-4 w-4" />
                 Retry
               </Button>
             ) : null}
-            <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
-              <ArrowLeft className="h-4 w-4 mr-2" />
+            <Button onClick={onReset} variant="outline" className="flex-1">
+              <ArrowLeft className="h-4 w-4" />
               Cancel & Go Back
             </Button>
           </div>
         ) : isTransferring ? (
           <div className="flex gap-3">
-            <Button onClick={onCancel} variant="outline" className="flex-1 rounded-xl">
-              <X className="h-4 w-4 mr-2" />
+            <Button onClick={onCancel} variant="outline" className="flex-1">
+              <X className="h-4 w-4" />
               Cancel Transfer
             </Button>
           </div>
         ) : isComplete || isCancelled ? (
           <div className="flex flex-col sm:flex-row gap-3">
             {isReceiver ? (
-              <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
-                <ArrowLeft className="h-4 w-4 mr-2" />
+              <Button onClick={onReset} variant="outline" className="flex-1">
+                <ArrowLeft className="h-4 w-4" />
                 Back to menu
               </Button>
             ) : (
-              <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
-                <RotateCcw className="h-4 w-4 mr-2" />
+              <Button onClick={onReset} variant="outline" className="flex-1">
+                <RotateCcw className="h-4 w-4" />
                 New transfer
               </Button>
             )}
             {isReceiver && onBackToSend ? (
-              <Button onClick={onBackToSend} variant="ghost" className="flex-1 rounded-xl">
+              <Button onClick={onBackToSend} variant="ghost" className="flex-1">
                 Switch to Send
               </Button>
             ) : null}
             {!isReceiver && onBackToReceive ? (
-              <Button onClick={onBackToReceive} variant="ghost" className="flex-1 rounded-xl">
+              <Button onClick={onBackToReceive} variant="ghost" className="flex-1">
                 Switch to Receive
               </Button>
             ) : null}
           </div>
         ) : (
           <div className="flex gap-3">
-            <Button onClick={onReset} variant="outline" className="flex-1 rounded-xl">
-              <RotateCcw className="h-4 w-4 mr-2" />
+            <Button onClick={onReset} variant="outline" className="flex-1">
+              <RotateCcw className="h-4 w-4" />
               Back
             </Button>
           </div>

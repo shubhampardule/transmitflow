@@ -19,57 +19,35 @@ export default function OpenGraphImage() {
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: '56px 64px',
-          color: 'white',
-          background:
-            'linear-gradient(135deg, #0f172a 0%, #1e1b4b 40%, #581c87 72%, #9d174d 100%)',
-          fontFamily: 'Inter, system-ui, sans-serif',
+          color: '#E4E9EF',
+          background: '#0A0E1A',
+          fontFamily: 'sans-serif',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          <div
-            style={{
-              position: 'relative',
-              width: 64,
-              height: 64,
-              display: 'flex',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                width: 44,
-                height: 44,
-                borderRadius: 9999,
-                left: 0,
-                top: 0,
-                background: 'linear-gradient(135deg, #6366F1 0%, #A855F7 50%, #EC4899 100%)',
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                width: 24,
-                height: 24,
-                borderRadius: 9999,
-                right: 0,
-                bottom: 0,
-                background: 'linear-gradient(135deg, #6366F1 0%, #A855F7 50%, #EC4899 100%)',
-              }}
-            />
-          </div>
-          <div style={{ fontSize: 44, fontWeight: 800, letterSpacing: -1.2 }}>TransmitFlow</div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 980 }}>
-          <div style={{ fontSize: 64, lineHeight: 1.04, fontWeight: 800, letterSpacing: -1.6 }}>
-            Private peer-to-peer file transfer
-          </div>
-          <div style={{ fontSize: 30, opacity: 0.9 }}>
-            No account. No cloud upload step. Just direct sharing.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <svg width="52" height="52" viewBox="0 0 100 100">
+            <line x1="32" y1="70" x2="68" y2="30" stroke="#E14A34" strokeWidth="6" />
+            <rect x="14" y="56" width="28" height="28" rx="3" fill="#E4E9EF" />
+            <rect x="58" y="16" width="28" height="28" rx="3" fill="#E4E9EF" />
+          </svg>
+          <div style={{ fontSize: 40, fontWeight: 700, letterSpacing: -1, fontFamily: 'monospace' }}>
+            TransmitFlow
           </div>
         </div>
 
-        <div style={{ fontSize: 24, opacity: 0.8 }}>transmitflow.fun</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 980 }}>
+          <div style={{ fontSize: 62, lineHeight: 1.06, fontWeight: 700, letterSpacing: -1.5 }}>
+            Files move in a straight line.
+          </div>
+          <div style={{ fontSize: 28, color: '#8B93A0' }}>
+            Direct peer-to-peer file transfer over WebRTC. No account, no cloud step, no size limit.
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 22, color: '#8B93A0', fontFamily: 'monospace' }}>
+          <div style={{ width: 8, height: 8, background: '#E14A34' }} />
+          transmitflow.fun
+        </div>
       </div>
     ),
     {

@@ -1,11 +1,7 @@
 <svg width="512" height="512" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="pwaGradient512" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#6366F1" />
-      <stop offset="50%" stop-color="#A855F7" />
-      <stop offset="100%" stop-color="#EC4899" />
-    </linearGradient>
-  </defs>
-  <circle cx="58" cy="55" r="28" fill="url(#pwaGradient512)" />
-  <circle cx="24" cy="24" r="14" fill="url(#pwaGradient512)" />
+  <rect width="100" height="100" fill="#121B30" />
+  <circle cx="47" cy="53" r="2.75" fill="#EC4E3C" />
+  <circle cx="53" cy="47" r="2.75" fill="#EC4E3C" />
+  <rect x="14" y="56" width="28" height="28" rx="4" fill="#E6EBEF" />
+  <rect x="58" y="16" width="28" height="28" rx="4" fill="#E6EBEF" />
 </svg>

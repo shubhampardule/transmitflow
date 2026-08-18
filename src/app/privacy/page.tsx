@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <main className="mx-auto w-full max-w-4xl px-4 md:px-6 py-10 md:py-14">
-      <div className="rounded-2xl border border-border bg-card p-6 md:p-8">
+      <div className="rounded-md border border-border bg-card p-6 md:p-8">
         <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Privacy & Security</h1>
         <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
           TransmitFlow is designed for direct device-to-device transfer. This page explains what data is and is not handled by the service.
@@ -44,10 +44,10 @@ export default function PrivacyPage() {
         </section>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <Link href="/" className="inline-flex rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
+          <Link href="/" className="inline-flex rounded-md border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
             Back to TransmitFlow
           </Link>
-          <Link href="https://github.com/shubhampardule/transmitflow/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
+          <Link href="https://github.com/shubhampardule/transmitflow/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-md border border-border px-3 py-2 text-sm hover:bg-muted transition-colors">
             Security Policy
           </Link>
         </div>

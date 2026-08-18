@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import PwaManager from '@/components/ui/PwaManager';
@@ -18,16 +17,6 @@ const metadataBase = (() => {
     return new URL(DEFAULT_SITE_URL);
   }
 })();
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   metadataBase,
@@ -87,11 +76,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon.svg?v=2", type: "image/svg+xml" },
-      { url: "/favicon.svg?v=2", type: "image/svg+xml" },
+      { url: "/icon.svg?v=3", type: "image/svg+xml" },
+      { url: "/favicon.svg?v=3", type: "image/svg+xml" },
     ],
-    shortcut: [{ url: "/favicon.svg?v=2" }],
-    apple: [{ url: "/pwa-192.svg?v=2", type: "image/svg+xml" }],
+    shortcut: [{ url: "/favicon.svg?v=3" }],
+    apple: [{ url: "/pwa-192.svg?v=3", type: "image/svg+xml" }],
   },
 };
 
@@ -100,8 +89,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+    { media: "(prefers-color-scheme: light)", color: "#f0f3f4" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0e1a" },
   ],
 };
 
@@ -113,7 +102,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className="font-sans antialiased"
         suppressHydrationWarning={true}
       >
         <ThemeProvider>

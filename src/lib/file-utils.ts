@@ -2,8 +2,9 @@ export const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 B';
   
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const rawIndex = Math.floor(Math.log(bytes) / Math.log(k));
+  const i = Math.min(Math.max(rawIndex, 0), sizes.length - 1);
   
   const size = parseFloat((bytes / Math.pow(k, i)).toFixed(1));
   
@@ -15,8 +16,12 @@ export const formatFileSize = (bytes: number): string => {
   return `${size} ${sizes[i]}`;
 };
 
-const ROOM_CODE_CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+// Numeric only, so the receiver just types a plain 4-digit code — no separate
+// connection code. Security instead comes from the server only ever making a
+// code joinable while its creator is actively connected (see signaling-server).
+const ROOM_CODE_CHARSET = '0123456789';
 const ROOM_CODE_LENGTH = 4;
+
 const MAX_UNBIASED_BYTE_FOR_ROOM_CODE =
   Math.floor(256 / ROOM_CODE_CHARSET.length) * ROOM_CODE_CHARSET.length;
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Download, Wifi, WifiOff } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface DeferredInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -203,32 +204,32 @@ export default function PwaManager() {
   return (
     <>
       {networkBanner === 'offline' && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] rounded-full border border-amber-300/40 bg-amber-500/20 backdrop-blur px-4 py-2 text-amber-100 shadow-lg">
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] rounded-md border border-amber-500/60 bg-card px-4 py-2 text-foreground shadow-none">
           <span className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium">
-            <WifiOff className="h-4 w-4" />
+            <WifiOff className="h-4 w-4 text-amber-500" />
             You are offline. Reconnect to continue transfer.
           </span>
         </div>
       )}
 
       {networkBanner === 'online' && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] rounded-full border border-emerald-300/40 bg-emerald-500/20 backdrop-blur px-4 py-2 text-emerald-100 shadow-lg">
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[70] rounded-md border border-emerald-500/60 bg-card px-4 py-2 text-foreground shadow-none">
           <span className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium">
-            <Wifi className="h-4 w-4" />
+            <Wifi className="h-4 w-4 text-emerald-500" />
             Back online. Reconnecting...
           </span>
         </div>
       )}
 
       {showInstallButton && (
-        <button
+        <Button
           type="button"
           onClick={() => void handleInstallClick()}
-          className="fixed bottom-5 right-5 z-[70] inline-flex items-center gap-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 text-sm font-medium shadow-xl transition-colors"
+          className="fixed bottom-5 right-5 z-[70]"
         >
           <Download className="h-4 w-4" />
           Install App
-        </button>
+        </Button>
       )}
     </>
   );
