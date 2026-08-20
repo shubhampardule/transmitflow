@@ -1,24 +1,41 @@
+'use client';
+
+import { Download } from 'lucide-react';
 import TransmitFlowLogo from '@/components/ui/TransmitFlowLogo';
+import { usePwaInstall } from '@/hooks/usePwaInstall';
 
 export default function LandingFooter() {
+  const { canInstall, promptInstall } = usePwaInstall();
+
   return (
     <footer className="bg-background mt-8">
       <div className="airmail-stripe h-[3px] w-full opacity-80" />
       <div className="mx-auto max-w-6xl px-4 md:px-6 py-8">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <TransmitFlowLogo size={18} className="text-foreground" />
+        <div className="flex flex-col items-center gap-5 md:flex-row md:items-center md:justify-between md:gap-4">
+          <div className="flex items-center justify-center gap-2 text-center">
+            <TransmitFlowLogo size={18} className="text-foreground shrink-0" />
             <span className="font-display text-sm font-semibold">TransmitFlow</span>
-            <span className="text-xs text-muted-foreground">— direct device-to-device transfer</span>
+            <span className="hidden text-xs text-muted-foreground sm:inline">— direct device-to-device transfer</span>
           </div>
-          <div className="flex items-center gap-1.5 font-mono">
-            <a href="/privacy" className="inline-flex items-center rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none hover:bg-muted hover:text-foreground" title="Privacy & Security">
+          <div className="grid w-full grid-cols-3 place-items-center gap-x-1 gap-y-2 font-mono sm:flex sm:w-auto sm:flex-wrap sm:justify-center sm:gap-1.5">
+            {canInstall && (
+              <button
+                type="button"
+                onClick={() => void promptInstall()}
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none hover:bg-muted hover:text-foreground sm:px-2.5"
+                title="Install app"
+              >
+                <Download className="h-3.5 w-3.5 shrink-0" />
+                install app
+              </button>
+            )}
+            <a href="/privacy" className="inline-flex items-center rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none hover:bg-muted hover:text-foreground sm:px-2.5" title="Privacy & Security">
               privacy
             </a>
-            <a href="/terms" className="inline-flex items-center rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none hover:bg-muted hover:text-foreground" title="Terms of Use">
+            <a href="/terms" className="inline-flex items-center rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none hover:bg-muted hover:text-foreground sm:px-2.5" title="Terms of Use">
               terms
             </a>
-            <a href="/contact" className="inline-flex items-center rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none hover:bg-muted hover:text-foreground" title="Contact support">
+            <a href="/contact" className="inline-flex items-center rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none hover:bg-muted hover:text-foreground sm:px-2.5" title="Contact support">
               contact
             </a>
             <a href="https://github.com/shubhampardule/transmitflow" target="_blank" rel="noopener noreferrer" className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-out motion-reduce:transition-none hover:bg-muted hover:text-foreground" title="GitHub">
@@ -29,7 +46,8 @@ export default function LandingFooter() {
             </a>
           </div>
         </div>
-        <p className="mt-6 text-center font-mono text-xs text-muted-foreground">built for the open web</p>
+        <p className="mt-6 text-center font-mono text-xs text-muted-foreground sm:hidden">— direct device-to-device transfer</p>
+        <p className="mt-2 text-center font-mono text-xs text-muted-foreground sm:mt-6">built for the open web</p>
       </div>
     </footer>
   );

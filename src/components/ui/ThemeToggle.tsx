@@ -1,19 +1,23 @@
 'use client';
 
 import { Moon, Sun } from 'lucide-react';
-import { useTheme } from 'next-themes';
-import {
-  ThemeAnimationType,
-  useModeAnimation,
-} from 'react-theme-switch-animation';
+import { useCallback } from 'react';
+import { useThemeSwitchAnimation } from '@/components/hooks/useThemeSwitchAnimation';
 import { Button } from '@/components/ui/button';
+import { useTheme } from '@/components/ui/ThemeProvider';
 
 export default function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  const { ref, toggleSwitchTheme, isDarkMode } = useModeAnimation({
-    animationType: ThemeAnimationType.CIRCLE,
-    isDarkMode: theme === 'dark',
-    onDarkModeChange: (nextIsDark) => setTheme(nextIsDark ? 'dark' : 'light'),
+  const isDarkMode = theme === 'dark';
+
+  const handleToggle = useCallback(
+    (nextIsDark: boolean) => setTheme(nextIsDark ? 'dark' : 'light'),
+    [setTheme]
+  );
+
+  const { ref, toggleSwitchTheme } = useThemeSwitchAnimation({
+    isDarkMode,
+    onToggle: handleToggle,
   });
 
   return (

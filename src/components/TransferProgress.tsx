@@ -364,7 +364,7 @@ export default function TransferProgress({
                       alt="QR Code for the receiver invite"
                       width={220}
                       height={220}
-                      className="rounded-md border border-border bg-white"
+                      className="rounded-md border border-border bg-white w-[170px] h-[170px] sm:w-[220px] sm:h-[220px] max-w-full"
                     />
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground text-center">Sender: scan this code after selecting files.</p>

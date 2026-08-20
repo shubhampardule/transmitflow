@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import Script from "next/script";
 import PwaManager from '@/components/ui/PwaManager';
 import ProductionLogGuard from '@/components/ui/ProductionLogGuard';
 import ThemeProvider from '@/components/ui/ThemeProvider';
@@ -105,6 +106,9 @@ export default function RootLayout({
         className="font-sans antialiased"
         suppressHydrationWarning={true}
       >
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();`}
+        </Script>
         <ThemeProvider>
           <ProductionLogGuard />
           <PwaManager />
